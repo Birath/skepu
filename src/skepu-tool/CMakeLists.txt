@@ -31,6 +31,10 @@ clang_target_link_libraries(skepu-tool
 		clangAST
 		clangASTMatchers)
 
+target_compile_options(skepu-tool PRIVATE
+  -g 
+)
+
 install(TARGETS skepu-tool
 	EXPORT skepu-toolTargets
 	RUNTIME
