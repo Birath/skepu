@@ -262,5 +262,37 @@ std::string createMapReduceKernelProgram_CL(SkeletonInstance &instance, UserFunc
 		{"{{TEMPLATE_HEADER}}",        indexInfo.templateHeader}
 	});
 
+	std::stringstream kernelStream{};
+	kernelStream << templateString(sourceStream.str(), {
+		{"{{KERNEL_NAME}}",            kernelName},
+		{"{{CONTAINER_PROXIES}}",      argsInfo.proxyInitializer},
+		{"{{CONTAINER_PROXIE_INNER}}", argsInfo.proxyInitializerInner},
+		{"{{KERNEL_PARAMS}}",          SSKernelParamList.str()},
+		{"{{MAP_PARAMS}}",             SSMapFuncArgs.str()},
+		{"{{REDUCE_RESULT_TYPE}}",     reduceFunc.rawReturnTypeName},
+		{"{{MAP_RESULT_TYPE}}",        mapFunc.rawReturnTypeName},
+		{"{{FUNCTION_NAME_MAP}}",      mapFunc.uniqueName},
+		{"{{FUNCTION_NAME_REDUCE}}",   reduceFunc.uniqueName},
+		{"{{INDEX_INITIALIZER}}",      indexInfo.indexInit},
+		{"{{SIZE_PARAMS}}",            indexInfo.sizeParams},
+		{"{{STRIDE_PARAMS}}",          SSStrideParams.str()},
+		{"{{STRIDE_INIT}}",            SSStrideInit.str()}
+	});
+
+	// Replace usage of size_t to match host platform size
+	// Copied from skepu_opencl_helper
+	// FIXME
+	// Add error?
+	std::string kernelSource = kernelStream.str();
+	if (sizeof(size_t) <= sizeof(unsigned int))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned int ");
+	else if (sizeof(size_t) <= sizeof(unsigned long))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned long ");
+		
+	// TEMP fix for get_device_id() in kernel
+	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
+	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	kernelFile << kernelSource;
+
 	return kernelName;
 }
