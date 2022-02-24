@@ -53,7 +53,26 @@ public:
 		static bool initialized = false;
 		if (initialized)
 			return;
+#if USE_INTEL_FPGA_OPENCL
 
+		size_t counter = 0;
+		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
+		{
+			std::ifstream binary_source_file
+			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			if (!binary_source_file.is_open()) {
+				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
+				return;
+			}
+			std::vector<unsigned char> binary_source(std::istreambuf_iterator<char>(binary_source_file), {});
+			cl_int err;
+			cl_program program = skepu::backend::cl_helpers::buildBinaryProgram(device, binary_source);
+			cl_kernel kernel = clCreateKernel(program, "{{KERNEL_NAME}}", &err);
+			CL_CHECK_ERROR(err, "Error creating map kernel '{{KERNEL_NAME}}'");
+
+			skepu_kernels(counter++, &kernel);
+		}
+#else
 		std::string source = skepu::backend::cl_helpers::replaceSizeT(R"###({{OPENCL_KERNEL}})###");
 
 		// Builds the code and creates kernel for all devices
@@ -67,6 +86,7 @@ public:
 
 			skepu_kernels(counter++, &kernel);
 		}
+#endif
 
 		initialized = true;
 	}
