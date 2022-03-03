@@ -159,6 +159,36 @@ public:
 		static bool initialized = false;
 		if (initialized)
 			return;
+#if USE_INTEL_FPGA_OPENCL
+
+		size_t counter = 0;
+		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
+		{
+			std::ifstream binary_source_file
+			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			if (!binary_source_file.is_open()) {
+				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
+				return;
+			}
+			std::vector<unsigned char> binary_source(std::istreambuf_iterator<char>(binary_source_file), {});
+			cl_int err;
+			cl_program program = skepu::backend::cl_helpers::buildBinaryProgram(device, binary_source);
+
+			cl_kernel kernel_scan = clCreateKernel(program, "{{KERNEL_NAME}}_Scan", &err);
+			CL_CHECK_ERROR(err, "Error creating Scan kernel '{{KERNEL_NAME}}'");
+
+			cl_kernel kernel_scan_update = clCreateKernel(program, "{{KERNEL_NAME}}_ScanUpdate", &err);
+			CL_CHECK_ERROR(err, "Error creating Scan update kernel '{{KERNEL_NAME}}'");
+
+			cl_kernel kernel_scan_add = clCreateKernel(program, "{{KERNEL_NAME}}_ScanAdd", &err);
+			CL_CHECK_ERROR(err, "Error creating Scan add kernel '{{KERNEL_NAME}}'");
+
+			kernels(counter, KERNEL_SCAN,        &kernel_scan);
+			kernels(counter, KERNEL_SCAN_UPDATE, &kernel_scan_update);
+			kernels(counter, KERNEL_SCAN_ADD,    &kernel_scan_add);
+			counter++;
+		}
+#else
 
 		std::string source = skepu::backend::cl_helpers::replaceSizeT(R"###({{OPENCL_KERNEL}})###");
 
@@ -182,7 +212,7 @@ public:
 			kernels(counter, KERNEL_SCAN_ADD,    &kernel_scan_add);
 			counter++;
 		}
-
+#endif
 		initialized = true;
 	}
 
@@ -261,5 +291,29 @@ std::string createScanKernelProgram_CL(SkeletonInstance &instance, UserFunction 
 		{"{{KERNEL_NAME}}",         kernelName},
 		{"{{FUNCTION_NAME_SCAN}}",  scanFunc.uniqueName}
 	});
+
+	std::stringstream kernelStream{};
+	kernelStream << templateString(sourceStream.str(), {
+		{"{{KERNEL_NAME}}",         kernelName},
+		{"{{SCAN_TYPE}}",           scanFunc.resolvedReturnTypeName},
+		{"{{KERNEL_NAME}}",         kernelName},
+		{"{{FUNCTION_NAME_SCAN}}",  scanFunc.uniqueName}
+	});
+
+	// Replace usage of size_t to match host platform size
+	// Copied from skepu_opencl_helper
+	// FIXME
+	// Add error?
+	std::string kernelSource = kernelStream.str();
+	if (sizeof(size_t) <= sizeof(unsigned int))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned int ");
+	else if (sizeof(size_t) <= sizeof(unsigned long))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned long ");
+		
+	// TEMP fix for get_device_id() in kernel
+	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
+	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	kernelFile << kernelSource;
+
 	return kernelName;
 }
