@@ -130,6 +130,33 @@ public:
 		if (initialized)
 			return;
 
+#if USE_INTEL_FPGA_OPENCL
+
+		size_t counter = 0;
+		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
+		{
+			std::ifstream binary_source_file
+			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			if (!binary_source_file.is_open()) {
+				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
+				return;
+			}
+			std::vector<unsigned char> binary_source(std::istreambuf_iterator<char>(binary_source_file), {});
+			cl_int err;
+			cl_program program = skepu::backend::cl_helpers::buildBinaryProgram(device, binary_source);
+
+			cl_kernel kernel_mapreduce = clCreateKernel(program, "{{KERNEL_NAME}}", &err);
+			CL_CHECK_ERROR(err, "Error creating MapReduce kernel '{{KERNEL_NAME}}'");
+
+			cl_kernel kernel_reduce = clCreateKernel(program, "{{KERNEL_NAME}}_ReduceOnly", &err);
+			CL_CHECK_ERROR(err, "Error creating MapReduce_ReduceOnly kernel '{{KERNEL_NAME}}_ReduceOnly'");
+
+			kernels(counter, KERNEL_MAPREDUCE, &kernel_mapreduce);
+			kernels(counter, KERNEL_REDUCE, &kernel_reduce);
+			counter++;
+		}
+#else
+
 		std::string source = skepu::backend::cl_helpers::replaceSizeT(R"###({{OPENCL_KERNEL}})###");
 
 		// Builds the code and creates kernel for all devices
@@ -148,7 +175,7 @@ public:
 			kernels(counter, KERNEL_REDUCE,    &kernel_reduce);
 			counter++;
 		}
-
+#endif
 		initialized = true;
 	}
 
