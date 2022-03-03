@@ -53,7 +53,28 @@ public:
 		static bool initialized = false;
 		if (initialized)
 			return;
-		
+#if USE_INTEL_FPGA_OPENCL
+
+		size_t counter = 0;
+		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
+		{
+			std::ifstream binary_source_file
+			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			if (!binary_source_file.is_open()) {
+				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
+				return;
+			}
+			std::vector<unsigned char> binary_source(std::istreambuf_iterator<char>(binary_source_file), {});
+			cl_int err;
+			cl_program program = skepu::backend::cl_helpers::buildBinaryProgram(device, binary_source);
+
+			cl_kernel kernel = clCreateKernel(program, "{{KERNEL_NAME}}", &err);
+			CL_CHECK_ERROR(err, "Error creating mappairs kernel '{{KERNEL_NAME}}'");
+			
+			skepu_kernels(counter++, &kernel);
+		}
+#else
+
 		std::string source = skepu::backend::cl_helpers::replaceSizeT(R"###({{OPENCL_KERNEL}})###");
 		
 		// Builds the code and creates kernel for all devices
@@ -67,7 +88,7 @@ public:
 			
 			skepu_kernels(counter++, &kernel);
 		}
-		
+#endif
 		initialized = true;
 	}
 	
@@ -136,5 +157,34 @@ std::string createMapPairsKernelProgram_CL(SkeletonInstance &instance, UserFunct
 		{"{{OUTPUT_ASSIGN}}",           multiOutputAssign}
 	});
 	
+	std::stringstream kernelStream{};
+	kernelStream << templateString(sourceStream.str(), {
+		{"{{KERNEL_NAME}}",            kernelName},
+		{"{{FUNCTION_NAME_MAPPAIRS}}",  mapPairsFunc.uniqueName},
+		{"{{KERNEL_PARAMS}}",           SSKernelParamList.str()},
+		{"{{MAPPAIRS_ARGS}}",           SSMapPairsFuncArgs.str()},
+		{"{{INDEX_INITIALIZER}}",       indexInfo.indexInit},
+		{"{{CONTAINER_PROXIES}}",       argsInfo.proxyInitializer},
+		{"{{CONTAINER_PROXIE_INNER}}",  argsInfo.proxyInitializerInner},
+		{"{{MULTI_TYPE}}",              mapPairsFunc.multiReturnTypeNameGPU()},
+		{"{{USE_MULTIRETURN}}",         (mapPairsFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
+		{"{{OUTPUT_ASSIGN}}",           multiOutputAssign}
+	});
+
+	// Replace usage of size_t to match host platform size
+	// Copied from skepu_opencl_helper
+	// FIXME
+	// Add error?
+	std::string kernelSource = kernelStream.str();
+	if (sizeof(size_t) <= sizeof(unsigned int))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned int ");
+	else if (sizeof(size_t) <= sizeof(unsigned long))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned long ");
+		
+	// TEMP fix for get_device_id() in kernel
+	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
+	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	kernelFile << kernelSource;
+
 	return kernelName;
 }
