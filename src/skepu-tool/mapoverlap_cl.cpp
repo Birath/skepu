@@ -408,7 +408,38 @@ public:
 		static bool initialized = false;
 		if (initialized)
 			return;
+#if USE_INTEL_FPGA_OPENCL
 
+		size_t counter = 0;
+		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
+		{
+			std::ifstream binary_source_file
+			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			if (!binary_source_file.is_open()) {
+				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
+				return;
+			}
+			std::vector<unsigned char> binary_source(std::istreambuf_iterator<char>(binary_source_file), {});
+			cl_int err;
+			cl_kernel kernel_vector = clCreateKernel(program, "{{KERNEL_NAME}}_Vector", &err);
+			CL_CHECK_ERROR(err, "Error creating MapOverlap 1D vector kernel '{{KERNEL_NAME}}'");
+
+			cl_kernel kernel_matrix_row = clCreateKernel(program, "{{KERNEL_NAME}}_MatRowWise", &err);
+			CL_CHECK_ERROR(err, "Error creating MapOverlap 1D matrix row-wise kernel '{{KERNEL_NAME}}'");
+
+			cl_kernel kernel_matrix_col = clCreateKernel(program, "{{KERNEL_NAME}}_MatColWise", &err);
+			CL_CHECK_ERROR(err, "Error creating MapOverlap 1D matrix col-wise kernel '{{KERNEL_NAME}}'");
+
+			cl_kernel kernel_matrix_col_multi = clCreateKernel(program, "{{KERNEL_NAME}}_MatColWiseMulti", &err);
+			CL_CHECK_ERROR(err, "Error creating MapOverlap 1D matrix col-wise multi kernel '{{KERNEL_NAME}}'");
+
+			kernels(counter, KERNEL_VECTOR,           &kernel_vector);
+			kernels(counter, KERNEL_MATRIX_ROW,       &kernel_matrix_row);
+			kernels(counter, KERNEL_MATRIX_COL,       &kernel_matrix_col);
+			kernels(counter, KERNEL_MATRIX_COL_MULTI, &kernel_matrix_col_multi);
+			counter++;
+		}
+#else
 		std::string source = skepu::backend::cl_helpers::replaceSizeT(R"###({{OPENCL_KERNEL}})###");
 
 		// Builds the code and creates kernel for all devices
@@ -435,7 +466,7 @@ public:
 			kernels(counter, KERNEL_MATRIX_COL_MULTI, &kernel_matrix_col_multi);
 			counter++;
 		}
-
+#enfi
 		initialized = true;
 	}
 
@@ -575,6 +606,44 @@ std::string createMapOverlap1DKernelProgram_CL(SkeletonInstance &instance, UserF
 		{"{{OUTPUT_ASSIGN}}",            multiOutputAssign}
 	});
 
+	std::stringstream kernelStream{};
+	kernelStream << templateString(sourceStream.str(), {
+		{"{{MAPOVERLAP_INPUT_TYPE}}",    overlapParam.resolvedTypeName},
+		{"{{MAPOVERLAP_INPUT_TYPE_OPENCL}}", overlapParam.typeNameOpenCL()},
+		{"{{MAPOVERLAP_RESULT_TYPE}}",   mapOverlapFunc.resolvedReturnTypeName},
+		{"{{KERNEL_NAME}}",              kernelName},
+		{"{{INPUT_PARAM_NAME}}",         overlapParam.name},
+		{"{{FUNCTION_NAME_MAPOVERLAP}}", mapOverlapFunc.uniqueName},
+		{"{{KERNEL_PARAMS}}",            SSKernelParamList.str()},
+		{"{{MAPOVERLAP_ARGS}}",          SSMapOverlapFuncArgs.str()},
+		{"{{HOST_KERNEL_PARAMS}}",       SSHostKernelParamList.str()},
+		{"{{CONTAINER_PROXIES}}",        argsInfo.proxyInitializer + proxy},
+		{"{{CONTAINER_PROXIE_INNER}}",   argsInfo.proxyInitializerInner},
+		{"{{INDEX_INITIALIZER}}",        indexInfo.indexInit},
+		{"{{SIZE_PARAMS}}",              indexInfo.sizeParams},
+		{"{{SIZE_ARGS}}",                indexInfo.sizeArgs},
+		{"{{SIZES_TUPLE_PARAM}}",        indexInfo.sizesTupleParam},
+		{"{{MULTI_TYPE}}",               mapOverlapFunc.multiReturnTypeNameGPU()},
+		{"{{USE_MULTIRETURN}}",          (mapOverlapFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
+		{"{{OUTPUT_ASSIGN}}",            multiOutputAssign}
+	});
+
+	// Replace usage of size_t to match host platform size
+	// Copied from skepu_opencl_helper
+	// FIXME
+	// Add error?
+	std::string kernelSource = kernelStream.str();
+	if (sizeof(size_t) <= sizeof(unsigned int))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned int ");
+	else if (sizeof(size_t) <= sizeof(unsigned long))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned long ");
+		
+	// TEMP fix for get_device_id() in kernel
+	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
+	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	kernelFile << kernelSource;
+
+
 	return kernelName;
 }
 
@@ -694,7 +763,27 @@ public:
 		static bool initialized = false;
 		if (initialized)
 			return;
+#if USE_INTEL_FPGA_OPENCL
 
+		size_t counter = 0;
+		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
+		{
+			std::ifstream binary_source_file
+			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			if (!binary_source_file.is_open()) {
+				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
+				return;
+			}
+			std::vector<unsigned char> binary_source(std::istreambuf_iterator<char>(binary_source_file), {});
+			cl_int err;
+			cl_program program = skepu::backend::cl_helpers::buildBinaryProgram(device, binary_source);
+			
+			cl_kernel kernel = clCreateKernel(program, "{{KERNEL_NAME}}", &err);
+			CL_CHECK_ERROR(err, "Error creating MapOverlap 2D kernel '{{KERNEL_NAME}}'");
+
+			kernels(counter++, &kernel);
+		}
+#else
 		std::string source = skepu::backend::cl_helpers::replaceSizeT(R"###({{OPENCL_KERNEL}})###");
 
 		// Builds the code and creates kernel for all devices
@@ -708,7 +797,7 @@ public:
 
 			kernels(counter++, &kernel);
 		}
-
+#endif
 		initialized = true;
 	}
 
@@ -798,6 +887,44 @@ std::string createMapOverlap2DKernelProgram_CL(SkeletonInstance &instance, UserF
 		{"{{USE_MULTIRETURN}}",          (mapOverlapFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
 		{"{{OUTPUT_ASSIGN}}",            multiOutputAssign}
 	});
+
+	std::stringstream kernelStream{};
+	kernelStream << templateString(sourceStream.str(), {
+		{"{{MAPOVERLAP_INPUT_TYPE}}",    overlapParam.resolvedTypeName},
+		{"{{MAPOVERLAP_INPUT_TYPE_OPENCL}}", overlapParam.typeNameOpenCL()},
+		{"{{MAPOVERLAP_RESULT_TYPE}}",   mapOverlapFunc.resolvedReturnTypeName},
+		{"{{KERNEL_NAME}}",              kernelName},
+		{"{{INPUT_PARAM_NAME}}",         overlapParam.name},
+		{"{{FUNCTION_NAME_MAPOVERLAP}}", mapOverlapFunc.uniqueName},
+		{"{{KERNEL_PARAMS}}",            SSKernelParamList.str()},
+		{"{{MAPOVERLAP_ARGS}}",          SSMapOverlapFuncArgs.str()},
+		{"{{HOST_KERNEL_PARAMS}}",       SSHostKernelParamList.str()},
+		{"{{CONTAINER_PROXIES}}",        argsInfo.proxyInitializer + proxy},
+		{"{{CONTAINER_PROXIE_INNER}}",   argsInfo.proxyInitializerInner},
+		{"{{INDEX_INITIALIZER}}",        indexInfo.indexInit},
+		{"{{SIZE_PARAMS}}",              indexInfo.sizeParams},
+		{"{{SIZE_ARGS}}",                indexInfo.sizeArgs},
+		{"{{SIZES_TUPLE_PARAM}}",        indexInfo.sizesTupleParam},
+		{"{{MULTI_TYPE}}",               mapOverlapFunc.multiReturnTypeNameGPU()},
+		{"{{USE_MULTIRETURN}}",          (mapOverlapFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
+		{"{{OUTPUT_ASSIGN}}",            multiOutputAssign}
+	});
+
+	// Replace usage of size_t to match host platform size
+	// Copied from skepu_opencl_helper
+	// FIXME
+	// Add error?
+	std::string kernelSource = kernelStream.str();
+	if (sizeof(size_t) <= sizeof(unsigned int))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned int ");
+	else if (sizeof(size_t) <= sizeof(unsigned long))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned long ");
+		
+	// TEMP fix for get_device_id() in kernel
+	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
+	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	kernelFile << kernelSource;
+
 
 	return kernelName;
 }
@@ -936,7 +1063,27 @@ public:
 		static bool initialized = false;
 		if (initialized)
 			return;
+#if USE_INTEL_FPGA_OPENCL
 
+		size_t counter = 0;
+		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
+		{
+			std::ifstream binary_source_file
+			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			if (!binary_source_file.is_open()) {
+				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
+				return;
+			}
+			std::vector<unsigned char> binary_source(std::istreambuf_iterator<char>(binary_source_file), {});
+			cl_int err;
+			cl_program program = skepu::backend::cl_helpers::buildBinaryProgram(device, binary_source);
+
+			cl_kernel kernel = clCreateKernel(program, "{{KERNEL_NAME}}", &err);
+			CL_CHECK_ERROR(err, "Error creating MapOverlap 3D kernel '{{KERNEL_NAME}}'");
+
+			kernels(counter++, &kernel);
+		}
+#else
 		std::string source = skepu::backend::cl_helpers::replaceSizeT(R"###({{OPENCL_KERNEL}})###");
 
 		// Builds the code and creates kernel for all devices
@@ -950,7 +1097,7 @@ public:
 
 			kernels(counter++, &kernel);
 		}
-
+#endif
 		initialized = true;
 	}
 
@@ -1046,6 +1193,44 @@ std::string createMapOverlap3DKernelProgram_CL(SkeletonInstance &instance, UserF
 		{"{{USE_MULTIRETURN}}",          (mapOverlapFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
 		{"{{OUTPUT_ASSIGN}}",            multiOutputAssign}
 	});
+
+	std::stringstream kernelStream{};
+	kernelStream << templateString(sourceStream.str(), {
+		{"{{MAPOVERLAP_INPUT_TYPE}}",    overlapParam.resolvedTypeName},
+		{"{{MAPOVERLAP_INPUT_TYPE_OPENCL}}", overlapParam.typeNameOpenCL()},
+		{"{{MAPOVERLAP_RESULT_TYPE}}",   mapOverlapFunc.resolvedReturnTypeName},
+		{"{{KERNEL_NAME}}",              kernelName},
+		{"{{INPUT_PARAM_NAME}}",         overlapParam.name},
+		{"{{FUNCTION_NAME_MAPOVERLAP}}", mapOverlapFunc.uniqueName},
+		{"{{KERNEL_PARAMS}}",            SSKernelParamList.str()},
+		{"{{MAPOVERLAP_ARGS}}",          SSMapOverlapFuncArgs.str()},
+		{"{{HOST_KERNEL_PARAMS}}",       SSHostKernelParamList.str()},
+		{"{{CONTAINER_PROXIES}}",        argsInfo.proxyInitializer + proxy},
+		{"{{CONTAINER_PROXIE_INNER}}",   argsInfo.proxyInitializerInner},
+		{"{{INDEX_INITIALIZER}}",        indexInfo.indexInit},
+		{"{{SIZE_PARAMS}}",              indexInfo.sizeParams},
+		{"{{SIZE_ARGS}}",                indexInfo.sizeArgs},
+		{"{{SIZES_TUPLE_PARAM}}",        indexInfo.sizesTupleParam},
+		{"{{MULTI_TYPE}}",               mapOverlapFunc.multiReturnTypeNameGPU()},
+		{"{{USE_MULTIRETURN}}",          (mapOverlapFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
+		{"{{OUTPUT_ASSIGN}}",            multiOutputAssign}
+	});
+
+	// Replace usage of size_t to match host platform size
+	// Copied from skepu_opencl_helper
+	// FIXME
+	// Add error?
+	std::string kernelSource = kernelStream.str();
+	if (sizeof(size_t) <= sizeof(unsigned int))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned int ");
+	else if (sizeof(size_t) <= sizeof(unsigned long))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned long ");
+		
+	// TEMP fix for get_device_id() in kernel
+	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
+	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	kernelFile << kernelSource;
+
 
 	return kernelName;
 }
@@ -1217,6 +1402,26 @@ public:
 		if (initialized)
 			return;
 
+#if USE_INTEL_FPGA_OPENCL
+
+		size_t counter = 0;
+		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
+		{
+			std::ifstream binary_source_file
+			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			if (!binary_source_file.is_open()) {
+				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
+				return;
+			}
+			std::vector<unsigned char> binary_source(std::istreambuf_iterator<char>(binary_source_file), {});
+			cl_int err;
+			cl_program program = skepu::backend::cl_helpers::buildBinaryProgram(device, binary_source);
+			cl_kernel kernel = clCreateKernel(program, "{{KERNEL_NAME}}", &err);
+			CL_CHECK_ERROR(err, "Error creating MapOverlap 4D kernel '{{KERNEL_NAME}}'");
+			
+			skepu_kernels(counter++, &kernel);
+		}
+#else
 		std::string source = skepu::backend::cl_helpers::replaceSizeT(R"###({{OPENCL_KERNEL}})###");
 
 		// Builds the code and creates kernel for all devices
@@ -1230,7 +1435,7 @@ public:
 
 			kernels(counter++, &kernel);
 		}
-
+#endif
 		initialized = true;
 	}
 
@@ -1325,6 +1530,44 @@ std::string createMapOverlap4DKernelProgram_CL(SkeletonInstance &instance, UserF
 		{"{{USE_MULTIRETURN}}",          (mapOverlapFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
 		{"{{OUTPUT_ASSIGN}}",            multiOutputAssign}
 	});
+
+	std::stringstream kernelStream{};
+	kernelStream << templateString(sourceStream.str(), {
+		{"{{MAPOVERLAP_INPUT_TYPE}}",    overlapParam.resolvedTypeName},
+		{"{{MAPOVERLAP_INPUT_TYPE_OPENCL}}", overlapParam.typeNameOpenCL()},
+		{"{{MAPOVERLAP_RESULT_TYPE}}",   mapOverlapFunc.resolvedReturnTypeName},
+		{"{{KERNEL_NAME}}",              kernelName},
+		{"{{INPUT_PARAM_NAME}}",         overlapParam.name},
+		{"{{FUNCTION_NAME_MAPOVERLAP}}", mapOverlapFunc.uniqueName},
+		{"{{KERNEL_PARAMS}}",            SSKernelParamList.str()},
+		{"{{MAPOVERLAP_ARGS}}",          SSMapOverlapFuncArgs.str()},
+		{"{{HOST_KERNEL_PARAMS}}",       SSHostKernelParamList.str()},
+		{"{{CONTAINER_PROXIES}}",        argsInfo.proxyInitializer + proxy},
+		{"{{CONTAINER_PROXIE_INNER}}",   argsInfo.proxyInitializerInner},
+		{"{{INDEX_INITIALIZER}}",        indexInfo.indexInit},
+		{"{{SIZE_PARAMS}}",              indexInfo.sizeParams},
+		{"{{SIZE_ARGS}}",                indexInfo.sizeArgs},
+		{"{{SIZES_TUPLE_PARAM}}",        indexInfo.sizesTupleParam},
+		{"{{MULTI_TYPE}}",               mapOverlapFunc.multiReturnTypeNameGPU()},
+		{"{{USE_MULTIRETURN}}",          (mapOverlapFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
+		{"{{OUTPUT_ASSIGN}}",            multiOutputAssign}
+	});
+
+	// Replace usage of size_t to match host platform size
+	// Copied from skepu_opencl_helper
+	// FIXME
+	// Add error?
+	std::string kernelSource = kernelStream.str();
+	if (sizeof(size_t) <= sizeof(unsigned int))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned int ");
+	else if (sizeof(size_t) <= sizeof(unsigned long))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned long ");
+		
+	// TEMP fix for get_device_id() in kernel
+	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
+	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	kernelFile << kernelSource;
+
 
 	return kernelName;
 }
