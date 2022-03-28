@@ -14,7 +14,7 @@
 
 enum class Backend
 {
-	CPU, OpenMP, CUDA, OpenCL,
+	CPU, OpenMP, CUDA, OpenCL, FPGA
 };
 
 enum class AccessMode

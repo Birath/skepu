@@ -16,6 +16,7 @@ llvm::cl::opt<std::string> ResultName("name", llvm::cl::desc("File name of main 
 llvm::cl::opt<bool> GenCUDA("cuda",  llvm::cl::desc("Generate CUDA backend"),   llvm::cl::cat(SkePUCategory));
 llvm::cl::opt<bool> GenOMP("openmp", llvm::cl::desc("Generate OpenMP backend"), llvm::cl::cat(SkePUCategory));
 llvm::cl::opt<bool> GenCL("opencl",  llvm::cl::desc("Generate OpenCL backend"), llvm::cl::cat(SkePUCategory));
+llvm::cl::opt<bool> GenFPGA("fpga",  llvm::cl::desc("Generate FPGA backend"),   llvm::cl::cat(SkePUCategory));
 llvm::cl::opt<bool> GenStarPUMPI("starpu-mpi",  llvm::cl::desc("Generate StarPU-MPI backend"), llvm::cl::cat(SkePUCategory));
 
 llvm::cl::opt<bool> Verbose("verbose",  llvm::cl::desc("Verbose logging printout"), llvm::cl::cat(SkePUCategory));
@@ -116,6 +117,7 @@ public:
 		GlobalRewriter.InsertText(SLStart, "#define SKEPU_PRECOMPILED 1\n");
 		if (GenOMP)  GlobalRewriter.InsertText(SLStart, "#define SKEPU_OPENMP 1\n");
 		if (GenCL)   GlobalRewriter.InsertText(SLStart, "#define SKEPU_OPENCL 1\n");
+		if (GenFPGA)   GlobalRewriter.InsertText(SLStart, "#define SKEPU_FPGA 1\n");
 		if (GenCUDA) GlobalRewriter.InsertText(SLStart, "#define SKEPU_CUDA 1\n");
 		if (GenStarPUMPI) GlobalRewriter.InsertText(SLStart, "#define SKEPU_STARPU_MPI 1\n");
 //		if (!DoNotGenLineDirectives)
@@ -177,6 +179,7 @@ int main(int argc, const char **argv)
 		SkePULog() << "   OpenMP gen:       " << (GenOMP ? "ON" : "OFF") << "\n";
 		SkePULog() << "   CUDA gen:         " << (GenCUDA ? "ON" : "OFF") << "\n";
 		SkePULog() << "   OpenCL gen:       " << (GenCL ? "ON" : "OFF") << "\n";
+		SkePULog() << "   FPGA gen:       " << (GenFPGA ? "ON" : "OFF") << "\n";
 		SkePULog() << "   StarPU-MPI gen:   " << (GenStarPUMPI ? "ON" : "OFF") << "\n";
 		SkePULog() << "   Main output file: " << mainFileName << "\n";
 		SkePULog() << "# ======================================= #\n";
