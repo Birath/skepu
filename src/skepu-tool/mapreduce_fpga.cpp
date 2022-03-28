@@ -122,6 +122,13 @@ public:
 		cl_int skepu_err = clEnqueueNDRangeKernel(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(skepu_deviceID)->getQueue(), skepu_kernel, 1, NULL, &size, &size, 0, NULL, NULL);
 		CL_CHECK_ERROR(skepu_err, "Error launching MapReduce kernel");
 	}
+
+	static void reduceOnly
+	(
+		size_t skepu_deviceID, size_t skepu_localSize, size_t skepu_globalSize,
+		skepu::backend::DeviceMemPointer_CL<{{REDUCE_RESULT_CPU}}> *skepu_input, skepu::backend::DeviceMemPointer_CL<{{REDUCE_RESULT_CPU}}> *skepu_output,
+		size_t skepu_n, size_t skepu_sharedMemSize
+	){}
 };
 )~~~";
 
