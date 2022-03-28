@@ -50,94 +50,6 @@ __kernel void {{KERNEL_NAME}}({{KERNEL_PARAMS}} __global {{REDUCE_RESULT_TYPE}}*
 		result = {{FUNCTION_NAME_REDUCE}}(shift_reg[i], result); 
 	}   
 	skepu_output[0] = result;
-
-	// size_t skepu_global_prng_id = get_global_id(0);
-	// size_t skepu_blockSize = get_local_size(0);
-	// size_t skepu_tid = get_local_id(0);
-	// size_t skepu_global_id = get_group_id(0) * skepu_blockSize + skepu_tid;
-	// size_t skepu_i = get_group_id(0) * skepu_blockSize + skepu_tid;
-	// size_t skepu_gridSize = skepu_blockSize * get_num_groups(0);
-	// {{REDUCE_RESULT_TYPE}} skepu_result;
-	// {{CONTAINER_PROXIES}}
-	// {{STRIDE_INIT}}
-
-	// if (skepu_i < skepu_n)
-	// {
-	// 	{{INDEX_INITIALIZER}}
-	// 	{{CONTAINER_PROXIE_INNER}}
-	// 	skepu_result = {{FUNCTION_NAME_MAP}}({{MAP_PARAMS}});
-	// 	skepu_i += skepu_gridSize;
-	// }
-
-	// while (skepu_i < skepu_n)
-	// {
-	// 	{{INDEX_INITIALIZER}}
-	// 	{{CONTAINER_PROXIE_INNER}}
-	// 	{{MAP_RESULT_TYPE}} tempMap = {{FUNCTION_NAME_MAP}}({{MAP_PARAMS}});
-	// 	skepu_result = {{FUNCTION_NAME_REDUCE}}(skepu_result, tempMap);
-	// 	skepu_i += skepu_gridSize;
-	// }
-
-	// skepu_sdata[skepu_tid] = skepu_result;
-	// barrier(CLK_LOCAL_MEM_FENCE);
-	
-	// if (skepu_blockSize >= 1024) { if (skepu_tid < 512 && skepu_tid + 512 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid + 512]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	// if (skepu_blockSize >=  512) { if (skepu_tid < 256 && skepu_tid + 256 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid + 256]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	// if (skepu_blockSize >=  256) { if (skepu_tid < 128 && skepu_tid + 128 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid + 128]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	// if (skepu_blockSize >=  128) { if (skepu_tid <  64 && skepu_tid +  64 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid +  64]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	// if (skepu_blockSize >=   64) { if (skepu_tid <  32 && skepu_tid +  32 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid +  32]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	// if (skepu_blockSize >=   32) { if (skepu_tid <  16 && skepu_tid +  16 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid +  16]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	// if (skepu_blockSize >=   16) { if (skepu_tid <   8 && skepu_tid +   8 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid +   8]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	// if (skepu_blockSize >=    8) { if (skepu_tid <   4 && skepu_tid +   4 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid +   4]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	// if (skepu_blockSize >=    4) { if (skepu_tid <   2 && skepu_tid +   2 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid +   2]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	// if (skepu_blockSize >=    2) { if (skepu_tid <   1 && skepu_tid +   1 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid +   1]); } barrier(CLK_LOCAL_MEM_FENCE); }
-
-	// if (skepu_tid == 0)
-	// {
-	// 	skepu_output[get_group_id(0)] = skepu_sdata[skepu_tid];
-	// }
-}
-)~~~";
-
-static const char *ReduceKernelTemplate_CL = R"~~~(
-__kernel void {{KERNEL_NAME}}_ReduceOnly(__global {{REDUCE_RESULT_TYPE}}* skepu_input, __global {{REDUCE_RESULT_TYPE}}* skepu_output, size_t skepu_n, __local {{REDUCE_RESULT_TYPE}}* skepu_sdata)
-{
-	size_t skepu_blockSize = get_local_size(0);
-	size_t skepu_tid = get_local_id(0);
-	size_t skepu_i = get_group_id(0) * skepu_blockSize + get_local_id(0);
-	size_t skepu_gridSize = skepu_blockSize * get_num_groups(0);
-	{{REDUCE_RESULT_TYPE}} skepu_result;
-
-	if (skepu_i < skepu_n)
-	{
-		skepu_result = skepu_input[skepu_i];
-		skepu_i += skepu_gridSize;
-	}
-
-	while (skepu_i < skepu_n)
-	{
-		skepu_result = {{FUNCTION_NAME_REDUCE}}(skepu_result, skepu_input[skepu_i]);
-		skepu_i += skepu_gridSize;
-	}
-
-	skepu_sdata[skepu_tid] = skepu_result;
-	barrier(CLK_LOCAL_MEM_FENCE);
-	
-	if (skepu_blockSize >= 1024) { if (skepu_tid < 512 && skepu_tid + 512 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid + 512]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (skepu_blockSize >=  512) { if (skepu_tid < 256 && skepu_tid + 256 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid + 256]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (skepu_blockSize >=  256) { if (skepu_tid < 128 && skepu_tid + 128 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid + 128]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (skepu_blockSize >=  128) { if (skepu_tid <  64 && skepu_tid +  64 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid +  64]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (skepu_blockSize >=   64) { if (skepu_tid <  32 && skepu_tid +  32 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid +  32]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (skepu_blockSize >=   32) { if (skepu_tid <  16 && skepu_tid +  16 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid +  16]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (skepu_blockSize >=   16) { if (skepu_tid <   8 && skepu_tid +   8 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid +   8]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (skepu_blockSize >=    8) { if (skepu_tid <   4 && skepu_tid +   4 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid +   4]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (skepu_blockSize >=    4) { if (skepu_tid <   2 && skepu_tid +   2 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid +   2]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (skepu_blockSize >=    2) { if (skepu_tid <   1 && skepu_tid +   1 < skepu_n) { skepu_sdata[skepu_tid] = {{FUNCTION_NAME_REDUCE}}(skepu_sdata[skepu_tid], skepu_sdata[skepu_tid +   1]); } barrier(CLK_LOCAL_MEM_FENCE); }
-
-	if (skepu_tid == 0)
-	{
-		skepu_output[get_group_id(0)] = skepu_sdata[skepu_tid];
-	}
 }
 )~~~";
 
@@ -187,11 +99,7 @@ public:
 			cl_kernel kernel_mapreduce = clCreateKernel(program, "{{KERNEL_NAME}}", &err);
 			CL_CHECK_ERROR(err, "Error creating MapReduce kernel '{{KERNEL_NAME}}'");
 
-			cl_kernel kernel_reduce = clCreateKernel(program, "{{KERNEL_NAME}}_ReduceOnly", &err);
-			CL_CHECK_ERROR(err, "Error creating MapReduce_ReduceOnly kernel '{{KERNEL_NAME}}_ReduceOnly'");
-
 			kernels(counter, KERNEL_MAPREDUCE, &kernel_mapreduce);
-			kernels(counter, KERNEL_REDUCE, &kernel_reduce);
 			counter++;
 		}
 
@@ -213,20 +121,6 @@ public:
 		size_t size = 1;
 		cl_int skepu_err = clEnqueueNDRangeKernel(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(skepu_deviceID)->getQueue(), skepu_kernel, 1, NULL, &size, &size, 0, NULL, NULL);
 		CL_CHECK_ERROR(skepu_err, "Error launching MapReduce kernel");
-	}
-
-	static void reduceOnly
-	(
-		size_t skepu_deviceID, size_t skepu_localSize, size_t skepu_globalSize,
-		skepu::backend::DeviceMemPointer_CL<{{REDUCE_RESULT_CPU}}> *skepu_input, skepu::backend::DeviceMemPointer_CL<{{REDUCE_RESULT_CPU}}> *skepu_output,
-		size_t skepu_n, size_t skepu_sharedMemSize
-	)
-	{
-		cl_kernel skepu_kernel = kernels(skepu_deviceID, KERNEL_REDUCE);
-		skepu::backend::cl_helpers::setKernelArgs(skepu_kernel, skepu_input->getDeviceDataPointer(), skepu_output->getDeviceDataPointer(), skepu_n);
-		clSetKernelArg(skepu_kernel, 3, skepu_sharedMemSize, NULL);
-		cl_int skepu_err = clEnqueueNDRangeKernel(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(skepu_deviceID)->getQueue(), skepu_kernel, 1, NULL, &skepu_globalSize, &skepu_localSize, 0, NULL, NULL);
-		CL_CHECK_ERROR(skepu_err, "Error launching MapReduce reduce-only kernel");
 	}
 };
 )~~~";
@@ -269,7 +163,7 @@ std::string createMapReduceKernelProgram_FPGA(SkeletonInstance &instance, UserFu
 	else
 		sourceStream << generateUserFunctionCode_CL(mapFunc) << generateUserFunctionCode_CL(reduceFunc);
 
-	sourceStream << MapReduceKernelTemplate_FPGA << ReduceKernelTemplate_CL;
+	sourceStream << MapReduceKernelTemplate_FPGA;
 	
 	std::stringstream SSKernelName;
 	SSKernelName << instance << "_" << transformToCXXIdentifier(ResultName) << "_MapReduceKernel_" << mapFunc.uniqueName << "_" << reduceFunc.uniqueName << "_arity_" << mapFunc.Varity << "uid_" << GlobalSkeletonIndex++;

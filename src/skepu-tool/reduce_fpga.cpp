@@ -33,12 +33,11 @@ __kernel void {{KERNEL_NAME}}(__global {{REDUCE_RESULT_TYPE}} const* restrict in
 			partial_result = (index < size) ? {{FUNCTION_NAME_REDUCE}}(partial_result, input[index]) : partial_result;
 		}
 
-		{{REDUCE_RESULT_TYPE}} cur = {{FUNCTION_NAME_REDUCE}}(shift_reg[USER_FUNC_LATENCY-1], partial_result); 
+		shift_reg[USER_FUNC_LATENCY - 1] = {{FUNCTION_NAME_REDUCE}}(shift_reg[0], partial_result); 
 		#pragma unroll
-		for (int j = USER_FUNC_LATENCY - 1; j > 0; j--) { 
-			shift_reg[j] = shift_reg[j-1]; 
+		for (int j = 0 ; j < USER_FUNC_LATENCY - 1; j++) { 
+			shift_reg[j] = shift_reg[j + 1]; 
 		}
-		shift_reg[0] = cur;
 	}
 	{{REDUCE_RESULT_TYPE}} result = 0;
 	#pragma unroll 

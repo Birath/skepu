@@ -12,37 +12,36 @@ const char *MapKernelTemplate_FPGA = R"~~~(
 #ifndef UNROLL
 #define UNROLL 16
 #endif
+#ifndef SHIFT_REG_SIZE 
+#define SHIFT_REG_SIZE 8
+#endif
 __attribute__((reqd_work_group_size(1, 1, 1)))
 __attribute__((uses_global_work_offset(0)))
 __kernel void {{KERNEL_NAME}}({{KERNEL_PARAMS}} {{SIZE_PARAMS}} {{STRIDE_PARAMS}} size_t skepu_n, size_t skepu_base)
 {
 	{{CONTAINER_PROXIES}}
-	#pragma unroll UNROLL
+
+	{{MAP_RESULT_TYPE}} shift_reg[SHIFT_REG_SIZE] = {0};
+
     #pragma ivdep
 	#pragma loop_coalesce
-	for (int skepu_i = 0; skepu_i < skepu_n; skepu_i++) {
+	for (int skepu_i = 0; skepu_i < skepu_n + SHIFT_REG_SIZE + 1; skepu_i++) {
 		{{INDEX_INITIALIZER}}
 		{{CONTAINER_PROXIE_INNER}}
-        skepu_output[skepu_i] = {{FUNCTION_NAME_MAP}}({{MAP_ARGS}});
+		#pragma unroll
+		for (int i = 0; i < SHIFT_REG_SIZE - 1; i++) {
+            shift_reg[i] = shift_reg[i + 1];
+        }
+		if (skepu_i < skepu_n) {
+			shift_reg[SHIFT_REG_SIZE - 1] = {{FUNCTION_NAME_MAP}}({{MAP_ARGS}});
+		} else {
+			shift_reg[SHIFT_REG_SIZE - 1] = 0;
+		}
+
+		if (skepu_i >= SHIFT_REG_SIZE - 1) {
+			skepu_output[skepu_i - SHIFT_REG_SIZE + 1] = shift_reg[0];
+		}
 	}
-	// for (int skepu_i = 0; skepu_i < skepu_n; skepu_i++) {
-    //     #pragma unroll
-    //     for (int i = 0; i < SIZE - 1; i++) {
-    //         shift_reg[i] = shift_reg[i + 1];
-    //     }
-
-	// 	shift_reg[SIZE - 1] = {{FUNCTION_NAME_MAP}}({{MAP_ARGS}});;
-
-    //     if (skepu_i >= SIZE) {
-    //     	skepu_output[skepu_i-SIZE] = shift_reg[0];
-	// 	}
-	// }
-
-	// int offset = (skepu_n / SIZE) * SIZE;
-	// #pragma unroll
-	// for (int i = 0; i < SIZE; i++) {
-	// 	skepu_output[offset + skepu_n % SIZE - i - 1] = shift_reg[SIZE - i - 1];
-	// }
 }
 )~~~";
 
@@ -203,6 +202,7 @@ std::string createMapKernelProgram_FPGA(SkeletonInstance &instance, UserFunction
 		{"{{STRIDE_ARGS}}",            SSStrideArgs.str()},
 		{"{{STRIDE_COUNT}}",           SSStrideCount.str()},
 		{"{{STRIDE_INIT}}",            SSStrideInit.str()},
+		{"{{MAP_RESULT_TYPE}}", 	   mapFunc.resolvedReturnTypeName},
 		{"{{TEMPLATE_HEADER}}",        indexInfo.templateHeader},
 		{"{{MULTI_TYPE}}",             mapFunc.multiReturnTypeNameGPU()},
 		{"{{USE_MULTIRETURN}}",        (mapFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
@@ -228,6 +228,7 @@ std::string createMapKernelProgram_FPGA(SkeletonInstance &instance, UserFunction
 		{"{{STRIDE_ARGS}}",            SSStrideArgs.str()},
 		{"{{STRIDE_COUNT}}",           SSStrideCount.str()},
 		{"{{STRIDE_INIT}}",            SSStrideInit.str()},
+		{"{{MAP_RESULT_TYPE}}", 	   mapFunc.resolvedReturnTypeName},
 		{"{{TEMPLATE_HEADER}}",        indexInfo.templateHeader},
 		{"{{MULTI_TYPE}}",             mapFunc.multiReturnTypeNameGPU()},
 		{"{{USE_MULTIRETURN}}",        (mapFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
