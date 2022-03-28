@@ -9,11 +9,14 @@ add_clang_executable(skepu-tool
   code_gen_cu.cpp
   mapreduce_cl.cpp
   mapreduce_cu.cpp
+  mapreduce_fpga.cpp
   map_cl.cpp
   map_cu.cpp
+  map_fpga.cpp
   scan_cl.cpp
   scan_cu.cpp
   reduce_cl.cpp
+  reduce_fpga.cpp
   reduce_cu.cpp
   mapoverlap_cl.cpp
   mapoverlap_cu.cpp

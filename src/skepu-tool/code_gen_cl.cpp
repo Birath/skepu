@@ -501,13 +501,13 @@ RandomAccessAndScalarsResult handleRandomAccessAndUniforms_CL(
 			case ContainerType::MatRow:
 				SSKernelParamList << "__global " << param.innerTypeNameOpenCL() << " *" << name << ", size_t skepu_cols_" << param.name << ", ";
 				SSKernelArgs << "std::get<1>(" << name << ")->getDeviceDataPointer(), std::get<0>(" << name << ")->total_cols(), ";
-				SSProxyInitializerInner << param.TypeNameOpenCL() << " " << param.name << " = { .data = (" << name << " + skepu_i * skepu_cols_" << param.name << "), .cols = skepu_cols_" << param.name << " };\n";
+				SSProxyInitializerInner << param.TypeNameOpenCL() << " " << param.name << " = { .data = (" << name << " + (skepu_i / skepu_cols_" << param.name << ") * skepu_cols_" << param.name << "), .cols = skepu_cols_" << param.name << " };\n";
 				break;
 			
 			case ContainerType::MatCol:
-				SSKernelParamList << "__global " << param.innerTypeNameOpenCL() << " *" << name << ", size_t skepu_rows_" << param.name << ", ";
-				SSKernelArgs << "std::get<1>(" << name << ")->getDeviceDataPointer(), std::get<0>(" << name << ")->total_rows(), ";
-				SSProxyInitializerInner << param.TypeNameOpenCL() << " " << param.name << " = { .data = (" << name << " + skepu_i), .rows = skepu_rows_" << param.name << " };\n";
+				SSKernelParamList << "__global " << param.innerTypeNameOpenCL() << " *" << name << ", size_t skepu_rows_" << param.name << ", size_t skepu_cols_" << param.name << ", ";
+				SSKernelArgs << "std::get<1>(" << name << ")->getDeviceDataPointer(), std::get<0>(" << name << ")->total_rows(), std::get<0>(" << name << ")->total_cols(),";
+				SSProxyInitializerInner << param.TypeNameOpenCL() << " " << param.name << " = { .data = (" << name << " + skepu_i % skepu_rows_" << param.name << "), .cols = skepu_cols_" << param.name << ", .rows = skepu_rows_" << param.name << " };\n";
 				break;
 			
 			case ContainerType::Tensor3:

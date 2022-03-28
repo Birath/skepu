@@ -153,7 +153,7 @@ std::string replaceReferencesToOtherUFs(Backend backend, UserFunction &UF, std::
 
 	if (UF.multipleReturnTypes.size() > 0)
 	{
-		if (backend == Backend::OpenCL)
+		if (backend == Backend::OpenCL || backend == Backend::FPGA)
 		{
 			for (auto *ref : UF.ReferencedRets)
 				R.ReplaceText(ref->getCallee()->getSourceRange(), "make_" + UF.multiReturnTypeNameGPU());
@@ -165,7 +165,7 @@ std::string replaceReferencesToOtherUFs(Backend backend, UserFunction &UF, std::
 		}
 	}
 	
-	if (backend == Backend::OpenCL)
+	if (backend == Backend::OpenCL  || backend == Backend::FPGA)
 	{
 		for (auto *ref : UF.ReferencedGets)
 		{
@@ -195,7 +195,7 @@ std::string replaceReferencesToOtherUFs(Backend backend, UserFunction &UF, std::
 	for (auto subscript : UF.containerSubscripts)
 		R.InsertText(subscript->getCallee()->getBeginLoc(), ".data");
 	
-	if (backend == Backend::OpenCL)
+	if (backend == Backend::OpenCL || backend == Backend::FPGA)
 		for (auto subscript : UF.containerCalls)
 		{
 			Expr *arg0 = subscript->getArg(0);
@@ -221,7 +221,7 @@ std::string replaceReferencesToOtherUFs(Backend backend, UserFunction &UF, std::
 			R.ReplaceText(subscript->getSourceRange(), fname + "(" + varname + "," + args + ")");
 		}
 	
-	if (backend == Backend::OpenCL)
+	if (backend == Backend::OpenCL || backend == Backend::FPGA)
 		for (auto overload : UF.operatorOverloads)
 		{
 			auto ooc = overload->getOperator();
@@ -622,7 +622,75 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 		}
 	}
 
-	if (GenCL)
+	if (GenCL && GenFPGA) {
+		std::string KernelName_FPGA{};
+		switch (skeleton.type)
+		{
+		case Skeleton::Type::MapReduce:
+			KernelName_FPGA = createMapReduceKernelProgram_FPGA(skeletonID, *FuncArgs[0], *FuncArgs[1], ResultDir);
+			break;
+
+		case Skeleton::Type::Map:
+			KernelName_FPGA = createMapKernelProgram_FPGA(skeletonID, *FuncArgs[0], ResultDir);
+			break;
+
+		case Skeleton::Type::MapPairs:
+			KernelName_FPGA = createMapPairsKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			break;
+
+		case Skeleton::Type::MapPairsReduce:
+			KernelName_FPGA = createMapPairsReduceKernelProgram_CL(skeletonID, *FuncArgs[0], *FuncArgs[1], ResultDir);
+			break;
+
+		case Skeleton::Type::Reduce1D:
+			KernelName_FPGA = createReduce1DKernelProgram_FPGA(skeletonID, *FuncArgs[0], ResultDir);
+			break;
+
+		case Skeleton::Type::Reduce2D:
+			KernelName_FPGA = createReduce2DKernelProgram_FPGA(skeletonID, *FuncArgs[0], *FuncArgs[1], ResultDir);
+			break;
+
+		case Skeleton::Type::Scan:
+			KernelName_FPGA = createScanKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			break;
+
+		case Skeleton::Type::MapOverlap1D:
+			KernelName_FPGA = createMapOverlap1DKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			break;
+
+		case Skeleton::Type::MapOverlap2D:
+			KernelName_FPGA = createMapOverlap2DKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			break;
+
+		case Skeleton::Type::MapOverlap3D:
+			KernelName_FPGA = createMapOverlap3DKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			break;
+
+		case Skeleton::Type::MapOverlap4D:
+			KernelName_FPGA = createMapOverlap4DKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			break;
+
+		case Skeleton::Type::Call:
+			KernelName_FPGA = createCallKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			break;
+		}
+		if (GlobalRewriter.InsertText(loc, "#include \"" + KernelName_FPGA + "_cl_source.inl\"\n" + lineDirectiveForSourceLoc(loc)))
+			SkePUAbort("Code gen target source loc not rewritable: instance" + InstanceName);
+		switch (skeleton.type)
+		{
+		case Skeleton::Type::MapReduce:
+		case Skeleton::Type::Map:
+		case Skeleton::Type::Reduce1D:
+		case Skeleton::Type::Reduce2D:
+			SSTemplateArgs << ", FPGAWrapperClass_" << KernelName_FPGA;
+			break;
+		
+		default:
+			SSTemplateArgs << ", CLWrapperClass_" << KernelName_FPGA;
+			break;
+		}
+	}
+	else if (GenCL)
 	{
 		std::string KernelName_CL;
 		switch (skeleton.type)
@@ -685,6 +753,7 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 	{
 		SSTemplateArgs << ", void";
 	}
+
 
 	if(d->getStorageClass() == clang::StorageClass::SC_Static)
 		SSNewDecl << "static ";

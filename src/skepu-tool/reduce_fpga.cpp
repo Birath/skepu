@@ -10,42 +10,42 @@ using namespace clang;
 // ------------------------------
 
 static const char *ReduceKernelTemplate_CL = R"~~~(
-__kernel void {{KERNEL_NAME}}(__global {{REDUCE_RESULT_TYPE}}* input, __global {{REDUCE_RESULT_TYPE}}* output, size_t n, __local {{REDUCE_RESULT_TYPE}}* sdata)
+
+#ifndef REDUCTION_UNROLL
+#define REDUCTION_UNROLL 16
+#endif
+#ifndef USER_FUNC_LATENCY
+#define USER_FUNC_LATENCY 8
+#endif
+
+__attribute__((reqd_work_group_size(1, 1, 1)))
+__attribute__((uses_global_work_offset(0)))
+__kernel void {{KERNEL_NAME}}(__global {{REDUCE_RESULT_TYPE}} const* restrict input, __global {{REDUCE_RESULT_TYPE}}* restrict output, size_t size)
 {
-	size_t blockSize = get_local_size(0);
-	size_t tid = get_local_id(0);
-	size_t i = get_group_id(0) * blockSize + get_local_id(0);
-	size_t gridSize = blockSize * get_num_groups(0);
-	{{REDUCE_RESULT_TYPE}} result;
+	{{REDUCE_RESULT_TYPE}} shift_reg[USER_FUNC_LATENCY] = {0};
 
-	if (i < n)
-	{
-		result = input[i];
-		i += gridSize;
+	int exit = (size % REDUCTION_UNROLL == 0) ? (size / REDUCTION_UNROLL) : (size / REDUCTION_UNROLL) + 1;
+	for (int i = 0; i < exit; i++) {
+		{{REDUCE_RESULT_TYPE}} partial_result = 0;
+		#pragma unroll 
+		for (int j = 0; j < REDUCTION_UNROLL; j++) {
+			int index = i * REDUCTION_UNROLL + j;
+			partial_result = (index < size) ? {{FUNCTION_NAME_REDUCE}}(partial_result, input[index]) : partial_result;
+		}
+
+		{{REDUCE_RESULT_TYPE}} cur = {{FUNCTION_NAME_REDUCE}}(shift_reg[USER_FUNC_LATENCY-1], partial_result); 
+		#pragma unroll
+		for (int j = USER_FUNC_LATENCY - 1; j > 0; j--) { 
+			shift_reg[j] = shift_reg[j-1]; 
+		}
+		shift_reg[0] = cur;
 	}
-
-	while (i < n)
-	{
-		result = {{FUNCTION_NAME_REDUCE}}(result, input[i]);
-		i += gridSize;
-	}
-
-	sdata[tid] = result;
-	barrier(CLK_LOCAL_MEM_FENCE);
-
-	if (blockSize >= 1024) { if (tid < 512 && tid + 512 < n) { sdata[tid] = {{FUNCTION_NAME_REDUCE}}(sdata[tid], sdata[tid + 512]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (blockSize >=  512) { if (tid < 256 && tid + 256 < n) { sdata[tid] = {{FUNCTION_NAME_REDUCE}}(sdata[tid], sdata[tid + 256]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (blockSize >=  256) { if (tid < 128 && tid + 128 < n) { sdata[tid] = {{FUNCTION_NAME_REDUCE}}(sdata[tid], sdata[tid + 128]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (blockSize >=  128) { if (tid <  64 && tid +  64 < n) { sdata[tid] = {{FUNCTION_NAME_REDUCE}}(sdata[tid], sdata[tid +  64]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (blockSize >=   64) { if (tid <  32 && tid +  32 < n) { sdata[tid] = {{FUNCTION_NAME_REDUCE}}(sdata[tid], sdata[tid +  32]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (blockSize >=   32) { if (tid <  16 && tid +  16 < n) { sdata[tid] = {{FUNCTION_NAME_REDUCE}}(sdata[tid], sdata[tid +  16]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (blockSize >=   16) { if (tid <   8 && tid +   8 < n) { sdata[tid] = {{FUNCTION_NAME_REDUCE}}(sdata[tid], sdata[tid +   8]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (blockSize >=    8) { if (tid <   4 && tid +   4 < n) { sdata[tid] = {{FUNCTION_NAME_REDUCE}}(sdata[tid], sdata[tid +   4]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (blockSize >=    4) { if (tid <   2 && tid +   2 < n) { sdata[tid] = {{FUNCTION_NAME_REDUCE}}(sdata[tid], sdata[tid +   2]); } barrier(CLK_LOCAL_MEM_FENCE); }
-	if (blockSize >=    2) { if (tid <   1 && tid +   1 < n) { sdata[tid] = {{FUNCTION_NAME_REDUCE}}(sdata[tid], sdata[tid +   1]); } barrier(CLK_LOCAL_MEM_FENCE); }
-
-	if (tid == 0)
-		output[get_group_id(0)] = sdata[tid];
+	{{REDUCE_RESULT_TYPE}} result = 0;
+	#pragma unroll 
+	for (int i = 0; i < USER_FUNC_LATENCY; i++) {
+		result = {{FUNCTION_NAME_REDUCE}}(shift_reg[i], result); 
+	}   
+	output[0] = result;
 }
 )~~~";
 
@@ -72,34 +72,39 @@ public:
 		if (initialized)
 			return;
 
-		std::string source = skepu::backend::cl_helpers::replaceSizeT(R"###({{OPENCL_KERNEL}})###");
-
-		// Builds the code and creates kernel for all devices
 		size_t counter = 0;
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
+			std::ifstream binary_source_file
+			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			if (!binary_source_file.is_open()) {
+				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
+				return;
+			}
+			std::vector<unsigned char> binary_source(std::istreambuf_iterator<char>(binary_source_file), {});
 			cl_int err;
-			cl_program program = skepu::backend::cl_helpers::buildProgram(device, source);
+			cl_program program = skepu::backend::cl_helpers::buildBinaryProgram(device, binary_source);
 			cl_kernel kernel = clCreateKernel(program, "{{KERNEL_NAME}}", &err);
-			CL_CHECK_ERROR(err, "Error creating map kernel '{{KERNEL_NAME}}'");
+			CL_CHECK_ERROR(err, "Error creating reduce kernel '{{KERNEL_NAME}}'");
 
 			kernels(counter++, &kernel);
 		}
+
 		initialized = true;
 	}
 
 	static void reduce(size_t deviceID, size_t localSize, size_t globalSize, cl_mem input, cl_mem output, size_t n, size_t sharedMemSize)
 	{
 		skepu::backend::cl_helpers::setKernelArgs(kernels(deviceID), input, output, n);
-		clSetKernelArg(kernels(deviceID), 3, sharedMemSize, NULL);
-		cl_int err = clEnqueueNDRangeKernel(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(deviceID)->getQueue(), kernels(deviceID), 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
-		CL_CHECK_ERROR(err, "Error launching Map kernel");
+		size_t size = 1;
+		cl_int err = clEnqueueNDRangeKernel(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(deviceID)->getQueue(), kernels(deviceID), 1, NULL, &size, &size, 0, NULL, NULL);
+		CL_CHECK_ERROR(err, "Error launching Reduce kernel");
 	}
 };
 )~~~";
 
 
-std::string createReduce1DKernelProgram_CL(SkeletonInstance &instance, UserFunction &reduceFunc, std::string dir)
+std::string createReduce1DKernelProgram_FPGA(SkeletonInstance &instance, UserFunction &reduceFunc, std::string dir)
 {
 	std::stringstream sourceStream;
 
@@ -121,11 +126,34 @@ std::string createReduce1DKernelProgram_CL(SkeletonInstance &instance, UserFunct
 	FSOutFile << templateString(Constructor1D,
 	{
 		{"{{OPENCL_KERNEL}}",        sourceStream.str()},
-		{"{{KERNEL_CLASS}}",         "CLWrapperClass_" + kernelName},
+		{"{{KERNEL_CLASS}}",         "FPGAWrapperClass_" + kernelName},
 		{"{{REDUCE_RESULT_TYPE}}",   reduceFunc.resolvedReturnTypeName},
 		{"{{KERNEL_NAME}}",          kernelName},
 		{"{{FUNCTION_NAME_REDUCE}}", reduceFunc.uniqueName}
 	});
+
+	std::stringstream kernelStream{};
+	kernelStream << templateString(sourceStream.str(),
+	{
+		{"{{REDUCE_RESULT_TYPE}}",   reduceFunc.resolvedReturnTypeName},
+		{"{{KERNEL_NAME}}",          kernelName},
+		{"{{FUNCTION_NAME_REDUCE}}", reduceFunc.uniqueName}
+	});
+
+	// Replace usage of size_t to match host platform size
+	// Copied from skepu_opencl_helper
+	// FIXME
+	// Add error?
+	std::string kernelSource = kernelStream.str();
+	if (sizeof(size_t) <= sizeof(unsigned int))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned int ");
+	else if (sizeof(size_t) <= sizeof(unsigned long))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned long ");
+		
+	// TEMP fix for get_device_id() in kernel
+	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
+	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	kernelFile << kernelSource;
 
 	return kernelName;
 }
@@ -161,14 +189,18 @@ public:
 		if (initialized)
 			return;
 
-		std::string source = skepu::backend::cl_helpers::replaceSizeT(R"###({{OPENCL_KERNEL}})###");
-
-		// Builds the code and creates kernel for all devices
 		size_t counter = 0;
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
+			std::ifstream binary_source_file
+			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			if (!binary_source_file.is_open()) {
+				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
+				return;
+			}
+			std::vector<unsigned char> binary_source(std::istreambuf_iterator<char>(binary_source_file), {});
 			cl_int err;
-			cl_program program = skepu::backend::cl_helpers::buildProgram(device, source);
+			cl_program program = skepu::backend::cl_helpers::buildBinaryProgram(device, binary_source);
 
 			cl_kernel rowwisekernel = clCreateKernel(program, "{{KERNEL_NAME}}_RowWise", &err);
 			CL_CHECK_ERROR(err, "Error creating row-wise Reduce kernel '{{KERNEL_NAME}}'");
@@ -176,9 +208,8 @@ public:
 			cl_kernel colwisekernel = clCreateKernel(program, "{{KERNEL_NAME}}_ColWise", &err);
 			CL_CHECK_ERROR(err, "Error creating col-wise Reduce kernel '{{KERNEL_NAME}}'");
 
-			kernels(counter, KERNEL_ROWWISE, &rowwisekernel);
-			kernels(counter, KERNEL_COLWISE, &colwisekernel);
-			counter++;
+			kernels(counter++, KERNEL_ROWWISE, &rowwisekernel);
+			kernels(counter++, KERNEL_COLWISE, &colwisekernel);
 		}
 
 		initialized = true;
@@ -209,7 +240,7 @@ public:
 };
 )~~~";
 
-std::string createReduce2DKernelProgram_CL(SkeletonInstance &instance, UserFunction &rowWiseFunc, UserFunction &colWiseFunc, std::string dir)
+std::string createReduce2DKernelProgram_FPGA(SkeletonInstance &instance, UserFunction &rowWiseFunc, UserFunction &colWiseFunc, std::string dir)
 {
 	std::stringstream sourceStream;
 	const std::string kernelName = instance + "_" + transformToCXXIdentifier(ResultName) + "_ReduceKernel_" + rowWiseFunc.uniqueName + "_" + colWiseFunc.uniqueName;
@@ -230,7 +261,7 @@ std::string createReduce2DKernelProgram_CL(SkeletonInstance &instance, UserFunct
 	for (UserType *RefType : referencedUTs)
 		sourceStream << generateUserTypeCode_CL(*RefType);
 
-	const std::string className = "CLWrapperClass_" + kernelName;
+	const std::string className = "FPGAWrapperClass_" + kernelName;
 
 	sourceStream << KernelPredefinedTypes_CL;
 
@@ -261,6 +292,21 @@ std::string createReduce2DKernelProgram_CL(SkeletonInstance &instance, UserFunct
 
 	std::ofstream FSOutFile {dir + "/" + kernelName + "_cl_source.inl"};
 	FSOutFile << finalSource;
+
+	// Replace usage of size_t to match host platform size
+	// Copied from skepu_opencl_helper
+	// FIXME
+	// Add error?
+	std::string kernelSource = sourceStream.str();
+	if (sizeof(size_t) <= sizeof(unsigned int))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned int ");
+	else if (sizeof(size_t) <= sizeof(unsigned long))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned long ");
+		
+	// TEMP fix for get_device_id() in kernel
+	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
+	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	kernelFile << kernelSource;
 
 	return kernelName;
 }

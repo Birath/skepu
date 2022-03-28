@@ -40,3 +40,9 @@ std::string createMapOverlap2DKernelProgram_CL(SkeletonInstance&, UserFunction &
 std::string createMapOverlap3DKernelProgram_CL(SkeletonInstance&, UserFunction &mapOverlapFunc, std::string dir);
 std::string createMapOverlap4DKernelProgram_CL(SkeletonInstance&, UserFunction &mapOverlapFunc, std::string dir);
 std::string createCallKernelProgram_CL(SkeletonInstance&, UserFunction &callFunc, std::string dir);
+
+// FPGA generators
+std::string createReduce1DKernelProgram_FPGA(SkeletonInstance&, UserFunction &reduceFunc, std::string dir);
+std::string createReduce2DKernelProgram_FPGA(SkeletonInstance&, UserFunction &rowWiseFunc, UserFunction &colWiseFunc, std::string dir);
+std::string createMapKernelProgram_FPGA(SkeletonInstance&, UserFunction &mapFunc, std::string dir);
+std::string createMapReduceKernelProgram_FPGA(SkeletonInstance&, UserFunction &mapFunc, UserFunction &reduceFunc, std::string dir);
