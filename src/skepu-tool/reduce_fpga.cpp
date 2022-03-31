@@ -41,7 +41,7 @@ __kernel void {{KERNEL_NAME}}(__global {{REDUCE_RESULT_TYPE}} const* restrict in
 	}
 	{{REDUCE_RESULT_TYPE}} result = 0;
 	#pragma unroll 
-	for (int i = 0; i < USER_FUNC_LATENCY; i++) {
+	for (int i = 0; i < USER_FUNC_LATENCY - 1; i++) {
 		result = {{FUNCTION_NAME_REDUCE}}(shift_reg[i], result); 
 	}   
 	output[0] = result;
@@ -92,11 +92,10 @@ public:
 		initialized = true;
 	}
 
-	static void reduce(size_t deviceID, size_t localSize, size_t globalSize, cl_mem input, cl_mem output, size_t n, size_t sharedMemSize)
+	static void reduce(size_t deviceID, cl_mem input, cl_mem output, size_t n)
 	{
 		skepu::backend::cl_helpers::setKernelArgs(kernels(deviceID), input, output, n);
-		size_t size = 1;
-		cl_int err = clEnqueueNDRangeKernel(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(deviceID)->getQueue(), kernels(deviceID), 1, NULL, &size, &size, 0, NULL, NULL);
+		cl_int err = clEnqueueTask(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(deviceID)->getQueue(), kernels(deviceID), 0, NULL, NULL);
 		CL_CHECK_ERROR(err, "Error launching Reduce kernel");
 	}
 };
@@ -121,7 +120,7 @@ std::string createReduce1DKernelProgram_FPGA(SkeletonInstance &instance, UserFun
 	const std::string kernelName = instance + "_" + transformToCXXIdentifier(ResultName) + "_ReduceKernel_" + reduceFunc.uniqueName;
 	sourceStream << KernelPredefinedTypes_CL << generateUserFunctionCode_CL(reduceFunc) << ReduceKernelTemplate_CL;
 
-	std::ofstream FSOutFile {dir + "/" + kernelName + "_cl_source.inl"};
+	std::ofstream FSOutFile {dir + "/" + kernelName + "_fpga_source.inl"};
 	FSOutFile << templateString(Constructor1D,
 	{
 		{"{{OPENCL_KERNEL}}",        sourceStream.str()},
@@ -214,27 +213,27 @@ public:
 		initialized = true;
 	}
 
-	static void reduceRowWise(size_t deviceID, size_t localSize, size_t globalSize, cl_mem input, cl_mem output, size_t n, size_t sharedMemSize)
+	static void reduceRowWise(size_t deviceID, cl_mem input, cl_mem output, size_t n)
 	{
 		cl_kernel kernel = kernels(deviceID, KERNEL_ROWWISE);
 		skepu::backend::cl_helpers::setKernelArgs(kernel, input, output, n);
-		clSetKernelArg(kernel, 3, sharedMemSize, NULL);
-		cl_int err = clEnqueueNDRangeKernel(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(deviceID)->getQueue(), kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
-		CL_CHECK_ERROR(err, "Error launching Map kernel");
+		cl_int err = clEnqueueTask(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(deviceID)->getQueue(), kernels(deviceID), 0, NULL, NULL);
+
+		CL_CHECK_ERROR(err, "Error launching row-wise Reduce kernel");
 	}
 
-	static void reduceColWise(size_t deviceID, size_t localSize, size_t globalSize, cl_mem input, cl_mem output, size_t n, size_t sharedMemSize)
+	static void reduceColWise(size_t deviceID, cl_mem input, cl_mem output, size_t n)
 	{
 		cl_kernel kernel = kernels(deviceID, KERNEL_COLWISE);
 		skepu::backend::cl_helpers::setKernelArgs(kernel, input, output, n);
-		clSetKernelArg(kernel, 3, sharedMemSize, NULL);
-		cl_int err = clEnqueueNDRangeKernel(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(deviceID)->getQueue(), kernel, 1, NULL, &globalSize, &localSize, 0, NULL, NULL);
-		CL_CHECK_ERROR(err, "Error launching Map kernel");
+		cl_int err = clEnqueueTask(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(deviceID)->getQueue(), kernels(deviceID), 0, NULL, NULL);
+
+		CL_CHECK_ERROR(err, "Error launching col-wise reduce kernel");
 	}
 
-	static void reduce(size_t deviceID, size_t localSize, size_t globalSize, cl_mem input, cl_mem output, size_t n, size_t sharedMemSize)
+	static void reduce(size_t deviceID, cl_mem input, cl_mem output, size_t n)
 	{
-		reduceRowWise(deviceID, localSize, globalSize, input, output, n, sharedMemSize);
+		reduceRowWise(deviceID, localSize, globalSize, input, output, n);
 	}
 };
 )~~~";

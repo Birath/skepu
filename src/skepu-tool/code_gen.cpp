@@ -644,6 +644,7 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 
 		case Skeleton::Type::Reduce1D:
 			KernelName_FPGA = createReduce1DKernelProgram_FPGA(skeletonID, *FuncArgs[0], ResultDir);
+			createReduce1DKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
 			break;
 
 		case Skeleton::Type::Reduce2D:
@@ -674,6 +675,8 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 			KernelName_FPGA = createCallKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
 			break;
 		}
+		if (GlobalRewriter.InsertText(loc, "#include \"" + KernelName_FPGA + "_fpga_source.inl\"\n" + lineDirectiveForSourceLoc(loc)))
+			SkePUAbort("Code gen target source loc not rewritable: instance" + InstanceName);
 		if (GlobalRewriter.InsertText(loc, "#include \"" + KernelName_FPGA + "_cl_source.inl\"\n" + lineDirectiveForSourceLoc(loc)))
 			SkePUAbort("Code gen target source loc not rewritable: instance" + InstanceName);
 		switch (skeleton.type)
@@ -682,11 +685,10 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 		case Skeleton::Type::Map:
 		case Skeleton::Type::Reduce1D:
 		case Skeleton::Type::Reduce2D:
-			SSTemplateArgs << ", FPGAWrapperClass_" << KernelName_FPGA;
+			SSTemplateArgs << ", CLWrapperClass_" << KernelName_FPGA << ", FPGAWrapperClass_" << KernelName_FPGA;
 			break;
-		
 		default:
-			SSTemplateArgs << ", CLWrapperClass_" << KernelName_FPGA;
+			SSTemplateArgs << ", CLWrapperClass_" << KernelName_FPGA << ", bool";
 			break;
 		}
 	}
