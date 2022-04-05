@@ -752,7 +752,7 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 		if (GlobalRewriter.InsertText(loc, "#include \"" + KernelName_CL + "_cl_source.inl\"\n" + lineDirectiveForSourceLoc(loc)))
 			SkePUAbort("Code gen target source loc not rewritable: instance" + InstanceName);
 
-		SSTemplateArgs << ", CLWrapperClass_" << KernelName_CL;
+		SSTemplateArgs << ", CLWrapperClass_" << KernelName_CL <<", bool";
 	}
 	else
 	{
