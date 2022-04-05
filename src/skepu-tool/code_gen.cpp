@@ -632,6 +632,7 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 
 		case Skeleton::Type::Map:
 			KernelName_FPGA = createMapKernelProgram_FPGA(skeletonID, *FuncArgs[0], ResultDir);
+			createMapKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
 			break;
 
 		case Skeleton::Type::MapPairs:
@@ -652,7 +653,8 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 			break;
 
 		case Skeleton::Type::Scan:
-			KernelName_FPGA = createScanKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			createScanKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			KernelName_FPGA = createScanKernelProgram_FPGA(skeletonID, *FuncArgs[0], ResultDir);
 			break;
 
 		case Skeleton::Type::MapOverlap1D:
@@ -685,6 +687,7 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 		case Skeleton::Type::Map:
 		case Skeleton::Type::Reduce1D:
 		case Skeleton::Type::Reduce2D:
+		case Skeleton::Type::Scan:
 			SSTemplateArgs << ", CLWrapperClass_" << KernelName_FPGA << ", FPGAWrapperClass_" << KernelName_FPGA;
 			break;
 		default:

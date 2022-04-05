@@ -15,6 +15,7 @@ add_clang_executable(skepu-tool
   map_fpga.cpp
   scan_cl.cpp
   scan_cu.cpp
+  scan_fpga.cpp
   reduce_cl.cpp
   reduce_fpga.cpp
   reduce_cu.cpp

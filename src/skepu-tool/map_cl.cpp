@@ -180,46 +180,6 @@ std::string createMapKernelProgram_CL(SkeletonInstance &instance, UserFunction &
 		{"{{USE_MULTIRETURN}}",        (mapFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
 		{"{{OUTPUT_ASSIGN}}",          multiOutputAssign}
 	});
-			
-	std::stringstream kernelStream{};
-	kernelStream << templateString(sourceStream.str(), {
-		{"{{KERNEL_NAME}}",            kernelName},
-		{"{{FUNCTION_NAME_MAP}}",      mapFunc.uniqueName},
-		{"{{KERNEL_PARAMS}}",          SSKernelParamList.str()},
-		{"{{HOST_KERNEL_PARAMS}}",     SSHostKernelParamList.str()},
-		{"{{MAP_ARGS}}",               SSMapFuncArgs.str()},
-		{"{{INDEX_INITIALIZER}}",      indexInfo.indexInit},
-		{"{{KERNEL_CLASS}}",           "CLWrapperClass_" + kernelName},
-		{"{{KERNEL_ARGS}}",            SSKernelArgs.str()},
-		{"{{CONTAINER_PROXIES}}",      argsInfo.proxyInitializer},
-		{"{{CONTAINER_PROXIE_INNER}}", argsInfo.proxyInitializerInner},
-		{"{{SIZE_PARAMS}}",            indexInfo.sizeParams},
-		{"{{SIZE_ARGS}}",              indexInfo.sizeArgs},
-		{"{{SIZES_TUPLE_PARAM}}",      indexInfo.sizesTupleParam},
-		{"{{STRIDE_PARAMS}}",          SSStrideParams.str()},
-		{"{{STRIDE_ARGS}}",            SSStrideArgs.str()},
-		{"{{STRIDE_COUNT}}",           SSStrideCount.str()},
-		{"{{STRIDE_INIT}}",            SSStrideInit.str()},
-		{"{{TEMPLATE_HEADER}}",        indexInfo.templateHeader},
-		{"{{MULTI_TYPE}}",             mapFunc.multiReturnTypeNameGPU()},
-		{"{{USE_MULTIRETURN}}",        (mapFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
-		{"{{OUTPUT_ASSIGN}}",          multiOutputAssign}
-	});
-
-	// Replace usage of size_t to match host platform size
-	// Copied from skepu_opencl_helper
-	// FIXME
-	// Add error?
-	std::string kernel_source = kernelStream.str();
-	if (sizeof(size_t) <= sizeof(unsigned int))
-		replaceTextInString(kernel_source, std::string("size_t "), "unsigned int ");
-	else if (sizeof(size_t) <= sizeof(unsigned long))
-		replaceTextInString(kernel_source, std::string("size_t "), "unsigned long ");
-
-	// TEMP fix for get_device_id() in kernel
-	replaceTextInString(kernel_source, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream openClKernel {dir + "/" + kernelName + ".cl"};
-	openClKernel << kernel_source;
 
 	return kernelName;
 }

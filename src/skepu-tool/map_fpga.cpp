@@ -119,14 +119,13 @@ public:
 	{{TEMPLATE_HEADER}}
 	static void map
 	(
-		size_t skepu_deviceID, size_t skepu_localSize, size_t skepu_globalSize,
+		size_t skepu_deviceID,
 		{{HOST_KERNEL_PARAMS}} {{SIZES_TUPLE_PARAM}}
 		size_t skepu_n, size_t skepu_base, skepu::StrideList<{{STRIDE_COUNT}}> skepu_strides
 	)
 	{
 		skepu::backend::cl_helpers::setKernelArgs(skepu_kernels(skepu_deviceID), {{KERNEL_ARGS}} {{SIZE_ARGS}} {{STRIDE_ARGS}} skepu_n, skepu_base);
-		size_t size = 1;
-		cl_int skepu_err = clEnqueueNDRangeKernel(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(skepu_deviceID)->getQueue(), skepu_kernels(skepu_deviceID), 1, NULL, &size, &size, 0, NULL, NULL);
+		cl_int skepu_err = clEnqueueTask(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(skepu_deviceID)->getQueue(), skepu_kernels(skepu_deviceID), 0, NULL, NULL);
 		CL_CHECK_ERROR(skepu_err, "Error launching Map kernel");
 	}
 };
@@ -181,7 +180,7 @@ std::string createMapKernelProgram_FPGA(SkeletonInstance &instance, UserFunction
 	std::stringstream SSStrideCount;
 	SSStrideCount << (mapFunc.elwiseParams.size() + std::max<size_t>(1, mapFunc.multipleReturnTypes.size()));
 	
-	std::ofstream FSOutFile {dir + "/" + kernelName + "_cl_source.inl"};
+	std::ofstream FSOutFile {dir + "/" + kernelName + "_fpga_source.inl"};
 	FSOutFile << templateString(Constructor,
 	{
 		{"{{OPENCL_KERNEL}}",          sourceStream.str()},

@@ -46,3 +46,4 @@ std::string createReduce1DKernelProgram_FPGA(SkeletonInstance&, UserFunction &re
 std::string createReduce2DKernelProgram_FPGA(SkeletonInstance&, UserFunction &rowWiseFunc, UserFunction &colWiseFunc, std::string dir);
 std::string createMapKernelProgram_FPGA(SkeletonInstance&, UserFunction &mapFunc, std::string dir);
 std::string createMapReduceKernelProgram_FPGA(SkeletonInstance&, UserFunction &mapFunc, UserFunction &reduceFunc, std::string dir);
+std::string createScanKernelProgram_FPGA(SkeletonInstance&, UserFunction &scanFunc, std::string dir);
