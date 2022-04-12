@@ -658,7 +658,8 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 			break;
 
 		case Skeleton::Type::MapOverlap1D:
-			KernelName_FPGA = createMapOverlap1DKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			createMapOverlap1DKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			KernelName_FPGA = createMapOverlap1DKernelProgram_FPGA(skeletonID, *FuncArgs[0], ResultDir);
 			break;
 
 		case Skeleton::Type::MapOverlap2D:
@@ -683,6 +684,7 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 			SkePUAbort("Code gen target source loc not rewritable: instance" + InstanceName);
 		switch (skeleton.type)
 		{
+		case Skeleton::Type::MapOverlap1D:
 		case Skeleton::Type::MapReduce:
 		case Skeleton::Type::Map:
 		case Skeleton::Type::Reduce1D:

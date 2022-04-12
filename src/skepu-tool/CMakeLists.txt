@@ -21,6 +21,7 @@ add_clang_executable(skepu-tool
   reduce_cu.cpp
   mapoverlap_cl.cpp
   mapoverlap_cu.cpp
+  mapoverlap_fpga.cpp
   mappairs_cl.cpp
   mappairs_cu.cpp
   mappairsreduce_cl.cpp
