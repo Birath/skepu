@@ -5,6 +5,7 @@ add_clang_executable(skepu-tool
   visitor.cpp
   data_structures.cpp
   code_gen.cpp
+  code_gen_fpga.cpp
   code_gen_cl.cpp
   code_gen_cu.cpp
   mapreduce_cl.cpp
