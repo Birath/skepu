@@ -22,15 +22,19 @@ __attribute__((reqd_work_group_size(1, 1, 1)))
 __attribute__((uses_global_work_offset(0)))
 __kernel void {{KERNEL_NAME}}(__global {{REDUCE_RESULT_TYPE}} const* restrict input, __global {{REDUCE_RESULT_TYPE}}* restrict output, size_t size)
 {
-	{{REDUCE_RESULT_TYPE}} shift_reg[USER_FUNC_LATENCY] = {0};
+	{{REDUCE_RESULT_TYPE}} shift_reg[USER_FUNC_LATENCY];
+	#pragma unroll
+	for (int i = 0; i < USER_FUNC_LATENCY - 1; i++) {
+		shift_reg[i] = input[i];
+	}
 
 	int exit = (size % REDUCTION_UNROLL == 0) ? (size / REDUCTION_UNROLL) : (size / REDUCTION_UNROLL) + 1;
 	for (int i = 0; i < exit; i++) {
-		{{REDUCE_RESULT_TYPE}} partial_result = 0;
+		{{REDUCE_RESULT_TYPE}} partial_result = (USER_FUNC_LATENCY - 1 <= i * REDUCTION_UNROLL && i * REDUCTION_UNROLL < size) ? input[i * REDUCTION_UNROLL] : ({{REDUCE_RESULT_TYPE}}) {{REDUCE_RESULT_TYPE_DEFUALT}};
 		#pragma unroll 
-		for (int j = 0; j < REDUCTION_UNROLL; j++) {
+		for (int j = 1; j < REDUCTION_UNROLL; j++) {
 			int index = i * REDUCTION_UNROLL + j;
-			partial_result = (index < size) ? {{FUNCTION_NAME_REDUCE}}(partial_result, input[index]) : partial_result;
+			partial_result = (USER_FUNC_LATENCY - 1 <= index && index < size) ? {{FUNCTION_NAME_REDUCE}}(partial_result, input[index]) : partial_result;
 		}
 
 		shift_reg[USER_FUNC_LATENCY - 1] = {{FUNCTION_NAME_REDUCE}}(shift_reg[0], partial_result); 
@@ -39,9 +43,9 @@ __kernel void {{KERNEL_NAME}}(__global {{REDUCE_RESULT_TYPE}} const* restrict in
 			shift_reg[j] = shift_reg[j + 1]; 
 		}
 	}
-	{{REDUCE_RESULT_TYPE}} result = 0;
+	{{REDUCE_RESULT_TYPE}} result = shift_reg[0];
 	#pragma unroll 
-	for (int i = 0; i < USER_FUNC_LATENCY - 1; i++) {
+	for (int i = 1; i < USER_FUNC_LATENCY - 1; i++) {
 		result = {{FUNCTION_NAME_REDUCE}}(shift_reg[i], result); 
 	}   
 	output[0] = result;
@@ -75,9 +79,9 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
-				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
+				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_fpga.aocx" << '\n';
 				return;
 			}
 			std::vector<unsigned char> binary_source(std::istreambuf_iterator<char>(binary_source_file), {});
@@ -119,13 +123,14 @@ std::string createReduce1DKernelProgram_FPGA(SkeletonInstance &instance, UserFun
 
 	const std::string kernelName = instance + "_" + transformToCXXIdentifier(ResultName) + "_ReduceKernel_" + reduceFunc.uniqueName;
 	sourceStream << KernelPredefinedTypes_CL << generateUserFunctionCode_CL(reduceFunc) << ReduceKernelTemplate_CL;
-
+	const std::string defaultInitialization = reduceFunc.astDeclNode->getReturnType().getTypePtr()->isScalarType() ? "{0}" : "{}";
 	std::ofstream FSOutFile {dir + "/" + kernelName + "_fpga_source.inl"};
 	FSOutFile << templateString(Constructor1D,
 	{
 		{"{{OPENCL_KERNEL}}",        sourceStream.str()},
 		{"{{KERNEL_CLASS}}",         "FPGAWrapperClass_" + kernelName},
 		{"{{REDUCE_RESULT_TYPE}}",   reduceFunc.resolvedReturnTypeName},
+		{"{{REDUCE_RESULT_TYPE_DEFUALT}}", defaultInitialization},
 		{"{{KERNEL_NAME}}",          kernelName},
 		{"{{FUNCTION_NAME_REDUCE}}", reduceFunc.uniqueName}
 	});
@@ -134,6 +139,7 @@ std::string createReduce1DKernelProgram_FPGA(SkeletonInstance &instance, UserFun
 	kernelStream << templateString(sourceStream.str(),
 	{
 		{"{{REDUCE_RESULT_TYPE}}",   reduceFunc.resolvedReturnTypeName},
+		{"{{REDUCE_RESULT_TYPE_DEFUALT}}", defaultInitialization},
 		{"{{KERNEL_NAME}}",          kernelName},
 		{"{{FUNCTION_NAME_REDUCE}}", reduceFunc.uniqueName}
 	});
@@ -150,7 +156,7 @@ std::string createReduce1DKernelProgram_FPGA(SkeletonInstance &instance, UserFun
 		
 	// TEMP fix for get_device_id() in kernel
 	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	std::ofstream kernelFile {dir + "/" + kernelName + "_fpga.cl"};
 	kernelFile << kernelSource;
 
 	return kernelName;

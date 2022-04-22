@@ -644,8 +644,8 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 			break;
 
 		case Skeleton::Type::Reduce1D:
-			KernelName_FPGA = createReduce1DKernelProgram_FPGA(skeletonID, *FuncArgs[0], ResultDir);
 			createReduce1DKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			KernelName_FPGA = createReduce1DKernelProgram_FPGA(skeletonID, *FuncArgs[0], ResultDir);
 			break;
 
 		case Skeleton::Type::Reduce2D:

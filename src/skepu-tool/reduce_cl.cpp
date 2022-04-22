@@ -127,6 +127,29 @@ std::string createReduce1DKernelProgram_CL(SkeletonInstance &instance, UserFunct
 		{"{{FUNCTION_NAME_REDUCE}}", reduceFunc.uniqueName}
 	});
 
+
+	std::stringstream kernelStream{};
+	kernelStream << templateString(sourceStream.str(),
+	{
+		{"{{REDUCE_RESULT_TYPE}}",   reduceFunc.resolvedReturnTypeName},
+		{"{{KERNEL_NAME}}",          kernelName},
+		{"{{FUNCTION_NAME_REDUCE}}", reduceFunc.uniqueName}
+	});
+	// Replace usage of size_t to match host platform size
+	// Copied from skepu_opencl_helper
+	// FIXME
+	// Add error?
+	std::string kernelSource = kernelStream.str();
+	if (sizeof(size_t) <= sizeof(unsigned int))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned int ");
+	else if (sizeof(size_t) <= sizeof(unsigned long))
+		replaceTextInString(kernelSource, std::string("size_t "), "unsigned long ");
+		
+	// TEMP fix for get_device_id() in kernel
+	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
+	std::ofstream kernelFile {dir + "/" + kernelName + "_gpu.cl"};
+	kernelFile << kernelSource;
+
 	return kernelName;
 }
 
