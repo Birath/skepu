@@ -165,6 +165,46 @@ function(skepu_add_library name)
 
 endfunction(skepu_add_library)
 
+macro(skepu_build_fpga_kernel)
+	file(GLOB kernels "${_output_dir}/${_target_name}/*.cl")
+	set_source_files_properties(${kernels}
+			PROPERTIES
+				GENERATED TRUE)
+	MESSAGE(STATUS "KERNELS: ${kernels}")
+	foreach (kernel ${kernels})
+		get_filename_component(kernel_name ${kernel} NAME_WE)
+		get_filename_component(kernel_path ${kernel} DIRECTORY)
+		set(binary_output "${kernel_path}/${kernel_name}.aocx")
+		unset(_kernel_byproducts)
+		list(APPEND _kernel_byproducts ${binary_output} "${kernel_path}/${kernel_name}.aocr" ${kernel_name} ${kernel} )
+
+		add_custom_command(OUTPUT ${binary_output}
+			COMMAND "$ENV{INTELFPGAOCLSDKROOT}/bin/aoc" -q -march=emulator ${kernel} -o ${binary_output}
+			DEPENDS ${kernel}
+			BYPRODUCTS ${_kernel_byproducts}
+			VERBATIM
+		)
+		set_source_files_properties(${binary_output}
+			PROPERTIES
+				GENERATED TRUE)
+		add_custom_target(${kernel_name} 
+			DEPENDS ${binary_output}
+		)	
+		list(APPEND _fpga_kernel_targets ${kernel_name})
+		# execute_process(COMMAND "$ENV{INTELFPGAOCLSDKROOT}/bin/aoc" -q -march=emulator ${kernel} -o ${binary_output} RESULT_VARIABLE kernel_compile_result)
+		# MESSAGE(STATUS "Compilation result: ${kernel_compile_result}")
+		# if (kernel_compile_result)
+		# 	MESSAGE(FATAL_ERROR "OpenCL kernel compilation failed")
+		# else()
+		# 	list(APPEND _built_kernels ${binary_output})
+		# endif()
+
+	endforeach()
+	
+endmacro(skepu_build_fpga_kernel)
+
+set(_THIS_MODULE_BASE_DIR "${CMAKE_CURRENT_LIST_DIR}")
+
 #	skepu_add_executable(<name> [EXCLUDE_FROM_ALL]
 #		[[CUDA] [OpenCL] [OpenMP] | [MPI]]
 #		SKEPUSRC ssrc1 [ssrc2 ...]
@@ -195,6 +235,9 @@ function(skepu_add_executable name)
 		set(_target_name "${name}_${_file_name}_precompiled")
 		set(_target_byprod "${name}_${_file_name}_precompiled${_skepu_ext}")
 		set(_skepu_fnames "${_skepu_fnames}")
+		if (_skepu_fpga)
+			file(MAKE_DIRECTORY ${_output_dir}/${_target_name})
+		endif()
 		skepu_generate_include_generators()
 		add_custom_command(OUTPUT ${_output_dir}/${_target_byprod}
 			COMMAND
@@ -221,6 +264,18 @@ function(skepu_add_executable name)
 			SkePU::skepu-tool SkePU::clang-headers SkePU::SkePU)
 		list(APPEND _precompiled_src ${_output_dir}/${_target_byprod})
 		list(APPEND _skepu_targets ${_target_name})
+		if (_skepu_fpga)
+			skepu_build_fpga_kernel()
+			list(LENGTH _fpga_kernel_targets _kernel_count)
+			MESSAGE(STATUS "KERNEL TARGETS: ${_fpga_kernel_targets}")
+			if (_kernel_count EQUAL 0) 
+				add_custom_command(TARGET ${_target_name}
+						POST_BUILD
+						COMMAND ${CMAKE_COMMAND} -D KERNEL_DIR="${_output_dir}/${_target_name}" -P ${_THIS_MODULE_BASE_DIR}/BuildFPGAKernelHelper.cmake
+				)  				
+			endif()
+		endif()
+
 	endforeach()
 
 	# Finally add an executable target with both the procompiled source and C++
@@ -230,5 +285,5 @@ function(skepu_add_executable name)
 	target_include_directories(${name} PRIVATE ${_output_dir})
 	target_link_libraries(${name} PRIVATE ${_target_libs})
 	target_compile_options(${name} PRIVATE ${_target_cxxflags})
-	add_dependencies(${name} ${_skepu_targets})
+	add_dependencies(${name} ${_skepu_targets} ${_fpga_kernel_targets})
 endfunction(skepu_add_executable)

@@ -87,9 +87,9 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
-				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
+				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_fpga.aocx" << '\n';
 				return;
 			}
 			std::vector<unsigned char> binary_source(std::istreambuf_iterator<char>(binary_source_file), {});
@@ -181,7 +181,7 @@ std::string createMapReduceKernelProgram_FPGA(SkeletonInstance &instance, UserFu
 	std::stringstream SSStrideCount;
 	SSStrideCount << mapFunc.elwiseParams.size();
 	
-	std::ofstream FSOutFile {dir + "/" + kernelName + "_cl_source.inl"};
+	std::ofstream FSOutFile {dir + "/" + kernelName + "_fpga_source.inl"};
 	FSOutFile << templateString(Constructor,
 	{
 		{"{{OPENCL_KERNEL}}",          sourceStream.str()},
@@ -199,6 +199,7 @@ std::string createMapReduceKernelProgram_FPGA(SkeletonInstance &instance, UserFu
 		{"{{FUNCTION_NAME_MAP}}",      mapFunc.uniqueName},
 		{"{{FUNCTION_NAME_REDUCE}}",   reduceFunc.uniqueName},
 		{"{{KERNEL_NAME}}",            kernelName},
+		{"{{KERNEL_DIR}}",             ResultName},
 		{"{{INDEX_INITIALIZER}}",      indexInfo.indexInit},
 		{"{{SIZE_PARAMS}}",            indexInfo.sizeParams},
 		{"{{SIZE_ARGS}}",              indexInfo.sizeArgs},
@@ -239,7 +240,7 @@ std::string createMapReduceKernelProgram_FPGA(SkeletonInstance &instance, UserFu
 		
 	// TEMP fix for get_device_id() in kernel
 	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	std::ofstream kernelFile {dir + "/" + ResultName + "/" + kernelName + "_fpga.cl"};
 	kernelFile << kernelSource;
 
 	return kernelName;

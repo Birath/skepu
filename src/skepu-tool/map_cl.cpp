@@ -59,9 +59,9 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_gpu.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
-				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
+				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_gpu.aocx" << '\n';
 				return;
 			}
 			std::vector<unsigned char> binary_source(std::istreambuf_iterator<char>(binary_source_file), {});
@@ -158,6 +158,7 @@ std::string createMapKernelProgram_CL(SkeletonInstance &instance, UserFunction &
 	FSOutFile << templateString(Constructor,
 	{
 		{"{{OPENCL_KERNEL}}",          sourceStream.str()},
+		{"{{KERNEL_DIR}}",             ResultName},
 		{"{{KERNEL_NAME}}",            kernelName},
 		{"{{FUNCTION_NAME_MAP}}",      mapFunc.uniqueName},
 		{"{{KERNEL_PARAMS}}",          SSKernelParamList.str()},
@@ -180,6 +181,43 @@ std::string createMapKernelProgram_CL(SkeletonInstance &instance, UserFunction &
 		{"{{USE_MULTIRETURN}}",        (mapFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
 		{"{{OUTPUT_ASSIGN}}",          multiOutputAssign}
 	});
+
+	std::stringstream kernelStream{};
+	kernelStream << templateString(sourceStream.str(), {
+		{"{{KERNEL_NAME}}",            kernelName},
+		{"{{FUNCTION_NAME_MAP}}",      mapFunc.uniqueName},
+		{"{{KERNEL_PARAMS}}",          SSKernelParamList.str()},
+		{"{{MAP_ARGS}}",               SSMapFuncArgs.str()},
+		{"{{INDEX_INITIALIZER}}",      indexInfo.indexInit},
+		{"{{CONTAINER_PROXIES}}",      argsInfo.proxyInitializer},
+		{"{{CONTAINER_PROXIE_INNER}}", argsInfo.proxyInitializerInner},
+		{"{{SIZE_PARAMS}}",            indexInfo.sizeParams},
+		{"{{SIZE_ARGS}}",              indexInfo.sizeArgs},
+		{"{{SIZES_TUPLE_PARAM}}",      indexInfo.sizesTupleParam},
+		{"{{STRIDE_PARAMS}}",          SSStrideParams.str()},
+		{"{{STRIDE_ARGS}}",            SSStrideArgs.str()},
+		{"{{STRIDE_COUNT}}",           SSStrideCount.str()},
+		{"{{STRIDE_INIT}}",            SSStrideInit.str()},
+		{"{{MAP_RESULT_TYPE}}", 	   mapFunc.resolvedReturnTypeName},
+		{"{{MULTI_TYPE}}",             mapFunc.multiReturnTypeNameGPU()},
+		{"{{USE_MULTIRETURN}}",        (mapFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
+		{"{{OUTPUT_ASSIGN}}",          multiOutputAssign}
+	});
+
+	// Replace usage of size_t to match host platform size
+	// Copied from skepu_opencl_helper
+	// FIXME
+	// Add error?
+	std::string kernel_source = kernelStream.str();
+	if (sizeof(size_t) <= sizeof(unsigned int))
+		replaceTextInString(kernel_source, std::string("size_t "), "unsigned int ");
+	else if (sizeof(size_t) <= sizeof(unsigned long))
+		replaceTextInString(kernel_source, std::string("size_t "), "unsigned long ");
+
+	// TEMP fix for get_device_id() in kernel
+	replaceTextInString(kernel_source, "SKEPU_INTERNAL_DEVICE_ID", "0");
+	std::ofstream openClKernel {dir + "/" + ResultName + "/" + kernelName + "_gpu.cl"};
+	openClKernel << kernel_source;
 
 	return kernelName;
 }

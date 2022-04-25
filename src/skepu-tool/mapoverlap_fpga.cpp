@@ -44,7 +44,7 @@ __kernel void {{KERNEL_NAME}}_Vector({{KERNEL_PARAMS}}
 	}
 
 	for (int i = 0; i < skepu_n + skepu_overlap + 1; i++) {
-
+		#pragma unroll
 		for (int j = 0; j < OVERLAP_SHIFT_REG_SIZE - 1; j++) {
 			overlap_shift_reg[j] = overlap_shift_reg[j + 1];
 		}
@@ -255,7 +255,7 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
 				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_fpga.aocx" << '\n';
 				return;
@@ -372,6 +372,7 @@ std::string createMapOverlap1DKernelProgram_FPGA(SkeletonInstance &instance, Use
 		{"{{MAPOVERLAP_INPUT_TYPE_OPENCL}}", overlapParam.typeNameOpenCL()},
 		{"{{MAPOVERLAP_RESULT_TYPE}}",   mapOverlapFunc.resolvedReturnTypeName},
 		{"{{KERNEL_NAME}}",              kernelName},
+		{"{{KERNEL_DIR}}",               ResultName},
 		{"{{INPUT_PARAM_NAME}}",         overlapParam.name},
 		{"{{FUNCTION_NAME_MAPOVERLAP}}", mapOverlapFunc.uniqueName},
 		{"{{KERNEL_PARAMS}}",            SSKernelParamList.str()},
@@ -426,7 +427,7 @@ std::string createMapOverlap1DKernelProgram_FPGA(SkeletonInstance &instance, Use
 		
 	// TEMP fix for get_device_id() in kernel
 	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream kernelFile {dir + "/" + kernelName + "_fpga.cl"};
+	std::ofstream kernelFile {dir + "/" + ResultName + "/" + kernelName + "_fpga.cl"};
 	kernelFile << kernelSource;
 
 
@@ -554,7 +555,7 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
 				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_fpga.aocx" << '\n';
 				return;
@@ -588,8 +589,7 @@ public:
 			out_rows, out_cols, skepu_overlap_y, skepu_overlap_x, in_rows, in_cols, sharedRows, sharedCols,
 			skepu_edge, skepu_pad, skepu_wrap->getDeviceDataPointer());
 		clSetKernelArg(kernels(deviceID), {{KERNEL_ARG_COUNT}} + 11, sharedMemSize, NULL);
-		cl_int err = clEnqueueNDRangeKernel(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(deviceID)->getQueue(),
-			kernels(deviceID), 2, NULL, globalSize, localSize, 0, NULL, NULL);
+		cl_int err = clEnqueueTask(skepu::backend::Environment<int>::getInstance()->m_devices_CL.at(deviceID)->getQueue(), kernels(deviceID), 0, NULL, NULL);
 		CL_CHECK_ERROR(err, "Error launching MapOverlap 2D kernel");
 	}
 };
@@ -639,6 +639,7 @@ std::string createMapOverlap2DKernelProgram_FPGA(SkeletonInstance &instance, Use
 		{"{{MAPOVERLAP_INPUT_TYPE_OPENCL}}", overlapParam.typeNameOpenCL()},
 		{"{{MAPOVERLAP_RESULT_TYPE}}",   mapOverlapFunc.resolvedReturnTypeName},
 		{"{{KERNEL_NAME}}",              kernelName},
+		{"{{KERNEL_DIR}}",               ResultName},
 		{"{{INPUT_PARAM_NAME}}",         overlapParam.name},
 		{"{{FUNCTION_NAME_MAPOVERLAP}}", mapOverlapFunc.uniqueName},
 		{"{{KERNEL_PARAMS}}",            SSKernelParamList.str()},
@@ -693,7 +694,7 @@ std::string createMapOverlap2DKernelProgram_FPGA(SkeletonInstance &instance, Use
 		
 	// TEMP fix for get_device_id() in kernel
 	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	std::ofstream kernelFile {dir + "/" + ResultName + "/" + kernelName + "_fpga.cl"};
 	kernelFile << kernelSource;
 
 
@@ -839,7 +840,7 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
 				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_fpga.aocx" << '\n';
 				return;
@@ -929,6 +930,7 @@ std::string createMapOverlap3DKernelProgram_FPGA(SkeletonInstance &instance, Use
 		{"{{MAPOVERLAP_INPUT_TYPE_OPENCL}}", overlapParam.typeNameOpenCL()},
 		{"{{MAPOVERLAP_RESULT_TYPE}}",   mapOverlapFunc.resolvedReturnTypeName},
 		{"{{KERNEL_NAME}}",              kernelName},
+		{"{{KERNEL_DIR}}",               ResultName},
 		{"{{INPUT_PARAM_NAME}}",         overlapParam.name},
 		{"{{FUNCTION_NAME_MAPOVERLAP}}", mapOverlapFunc.uniqueName},
 		{"{{KERNEL_PARAMS}}",            SSKernelParamList.str()},
@@ -983,7 +985,7 @@ std::string createMapOverlap3DKernelProgram_FPGA(SkeletonInstance &instance, Use
 		
 	// TEMP fix for get_device_id() in kernel
 	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	std::ofstream kernelFile {dir + "/" + ResultName + "/" + kernelName + "_fpga.cl"};
 	kernelFile << kernelSource;
 
 
@@ -1161,7 +1163,7 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
 				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_fpga.aocx" << '\n';
 				return;
@@ -1250,6 +1252,7 @@ std::string createMapOverlap4DKernelProgram_FPGA(SkeletonInstance &instance, Use
 		{"{{MAPOVERLAP_INPUT_TYPE_OPENCL}}", overlapParam.typeNameOpenCL()},
 		{"{{MAPOVERLAP_RESULT_TYPE}}",   mapOverlapFunc.resolvedReturnTypeName},
 		{"{{KERNEL_NAME}}",              kernelName},
+		{"{{KERNEL_DIR}}",               ResultName},
 		{"{{INPUT_PARAM_NAME}}",         overlapParam.name},
 		{"{{FUNCTION_NAME_MAPOVERLAP}}", mapOverlapFunc.uniqueName},
 		{"{{KERNEL_PARAMS}}",            SSKernelParamList.str()},

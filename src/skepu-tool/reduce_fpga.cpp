@@ -156,7 +156,7 @@ std::string createReduce1DKernelProgram_FPGA(SkeletonInstance &instance, UserFun
 		
 	// TEMP fix for get_device_id() in kernel
 	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream kernelFile {dir + "/" + kernelName + "_fpga.cl"};
+	std::ofstream kernelFile {dir + "/" + ResultName + "/" + kernelName + "_fpga.cl"};
 	kernelFile << kernelSource;
 
 	return kernelName;
@@ -197,9 +197,9 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
-				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
+				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_fpga.aocx" << '\n';
 				return;
 			}
 			std::vector<unsigned char> binary_source(std::istreambuf_iterator<char>(binary_source_file), {});
@@ -292,6 +292,7 @@ std::string createReduce2DKernelProgram_FPGA(SkeletonInstance &instance, UserFun
 	std::string finalSource = Constructor2D;
 	replaceTextInString(finalSource, "{{OPENCL_KERNEL}}", sourceStream.str());
 	replaceTextInString(finalSource, "{{KERNEL_NAME}}", kernelName);
+	replaceTextInString(finalSource, "{{KERNEL_DIR}}",  ResultName);
 	replaceTextInString(finalSource, "{{KERNEL_CLASS}}", className);
 
 	std::ofstream FSOutFile {dir + "/" + kernelName + "_cl_source.inl"};
@@ -309,7 +310,7 @@ std::string createReduce2DKernelProgram_FPGA(SkeletonInstance &instance, UserFun
 		
 	// TEMP fix for get_device_id() in kernel
 	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	std::ofstream kernelFile {dir + "/" + ResultName + "/" + kernelName + "_fpga.cl"};
 	kernelFile << kernelSource;
 
 	return kernelName;

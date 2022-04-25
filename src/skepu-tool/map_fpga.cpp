@@ -99,7 +99,7 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
 				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}.aocx" << '\n';
 				return;
@@ -184,6 +184,7 @@ std::string createMapKernelProgram_FPGA(SkeletonInstance &instance, UserFunction
 	FSOutFile << templateString(Constructor,
 	{
 		{"{{OPENCL_KERNEL}}",          sourceStream.str()},
+		{"{{KERNEL_DIR}}",             ResultName},
 		{"{{KERNEL_NAME}}",            kernelName},
 		{"{{FUNCTION_NAME_MAP}}",      mapFunc.uniqueName},
 		{"{{KERNEL_PARAMS}}",          SSKernelParamList.str()},
@@ -213,11 +214,8 @@ std::string createMapKernelProgram_FPGA(SkeletonInstance &instance, UserFunction
 		{"{{KERNEL_NAME}}",            kernelName},
 		{"{{FUNCTION_NAME_MAP}}",      mapFunc.uniqueName},
 		{"{{KERNEL_PARAMS}}",          SSKernelParamList.str()},
-		{"{{HOST_KERNEL_PARAMS}}",     SSHostKernelParamList.str()},
 		{"{{MAP_ARGS}}",               SSMapFuncArgs.str()},
 		{"{{INDEX_INITIALIZER}}",      indexInfo.indexInit},
-		{"{{KERNEL_CLASS}}",           "FPGAWrapperClass_" + kernelName},
-		{"{{KERNEL_ARGS}}",            SSKernelArgs.str()},
 		{"{{CONTAINER_PROXIES}}",      argsInfo.proxyInitializer},
 		{"{{CONTAINER_PROXIE_INNER}}", argsInfo.proxyInitializerInner},
 		{"{{SIZE_PARAMS}}",            indexInfo.sizeParams},
@@ -228,7 +226,6 @@ std::string createMapKernelProgram_FPGA(SkeletonInstance &instance, UserFunction
 		{"{{STRIDE_COUNT}}",           SSStrideCount.str()},
 		{"{{STRIDE_INIT}}",            SSStrideInit.str()},
 		{"{{MAP_RESULT_TYPE}}", 	   mapFunc.resolvedReturnTypeName},
-		{"{{TEMPLATE_HEADER}}",        indexInfo.templateHeader},
 		{"{{MULTI_TYPE}}",             mapFunc.multiReturnTypeNameGPU()},
 		{"{{USE_MULTIRETURN}}",        (mapFunc.multipleReturnTypes.size() > 0) ? "1" : "0"},
 		{"{{OUTPUT_ASSIGN}}",          multiOutputAssign}
@@ -246,7 +243,7 @@ std::string createMapKernelProgram_FPGA(SkeletonInstance &instance, UserFunction
 
 	// TEMP fix for get_device_id() in kernel
 	replaceTextInString(kernel_source, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream openClKernel {dir + "/" + kernelName + ".cl"};
+	std::ofstream openClKernel {dir + "/" + ResultName + "/" + kernelName + "_fpga.cl"};
 	openClKernel << kernel_source;
 
 	return kernelName;

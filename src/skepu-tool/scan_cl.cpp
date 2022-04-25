@@ -165,7 +165,7 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}_gpu.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_gpu.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
 				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_gpu.aocx" << '\n';
 				return;
@@ -289,6 +289,7 @@ std::string createScanKernelProgram_CL(SkeletonInstance &instance, UserFunction 
 		{"{{KERNEL_CLASS}}",  "CLWrapperClass_" + kernelName},
 		{"{{SCAN_TYPE}}",           scanFunc.resolvedReturnTypeName},
 		{"{{KERNEL_NAME}}",         kernelName},
+		{"{{KERNEL_DIR}}",          ResultName},
 		{"{{FUNCTION_NAME_SCAN}}",  scanFunc.uniqueName}
 	});
 
@@ -312,7 +313,7 @@ std::string createScanKernelProgram_CL(SkeletonInstance &instance, UserFunction 
 		
 	// TEMP fix for get_device_id() in kernel
 	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream kernelFile {dir + "/" + kernelName + "_gpu.cl"};
+	std::ofstream kernelFile {dir + "/" + ResultName + "/" + kernelName + "_gpu.cl"};
 	kernelFile << kernelSource;
 
 	return kernelName;

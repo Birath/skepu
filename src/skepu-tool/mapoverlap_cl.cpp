@@ -414,7 +414,7 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}_gpu.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_gpu.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
 				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_gpu.aocx" << '\n';
 				return;
@@ -589,6 +589,7 @@ std::string createMapOverlap1DKernelProgram_CL(SkeletonInstance &instance, UserF
 		{"{{MAPOVERLAP_INPUT_TYPE_OPENCL}}", overlapParam.typeNameOpenCL()},
 		{"{{MAPOVERLAP_RESULT_TYPE}}",   mapOverlapFunc.resolvedReturnTypeName},
 		{"{{KERNEL_NAME}}",              kernelName},
+		{"{{KERNEL_DIR}}",               ResultName},
 		{"{{INPUT_PARAM_NAME}}",         overlapParam.name},
 		{"{{FUNCTION_NAME_MAPOVERLAP}}", mapOverlapFunc.uniqueName},
 		{"{{KERNEL_PARAMS}}",            SSKernelParamList.str()},
@@ -643,7 +644,7 @@ std::string createMapOverlap1DKernelProgram_CL(SkeletonInstance &instance, UserF
 		
 	// TEMP fix for get_device_id() in kernel
 	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream kernelFile {dir + "/" + kernelName + "_gpu.cl"};
+	std::ofstream kernelFile {dir + "/" + ResultName + "/" + kernelName + "_gpu.cl"};
 	kernelFile << kernelSource;
 
 
@@ -772,7 +773,7 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}_gpu.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_gpu.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
 				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_gpu.aocx" << '\n';
 				return;
@@ -871,6 +872,7 @@ std::string createMapOverlap2DKernelProgram_CL(SkeletonInstance &instance, UserF
 		{"{{MAPOVERLAP_INPUT_TYPE_OPENCL}}", overlapParam.typeNameOpenCL()},
 		{"{{MAPOVERLAP_RESULT_TYPE}}",   mapOverlapFunc.resolvedReturnTypeName},
 		{"{{KERNEL_NAME}}",              kernelName},
+		{"{{KERNEL_DIR}}",               ResultName},
 		{"{{INPUT_PARAM_NAME}}",         overlapParam.name},
 		{"{{FUNCTION_NAME_MAPOVERLAP}}", mapOverlapFunc.uniqueName},
 		{"{{KERNEL_PARAMS}}",            SSKernelParamList.str()},
@@ -925,7 +927,7 @@ std::string createMapOverlap2DKernelProgram_CL(SkeletonInstance &instance, UserF
 		
 	// TEMP fix for get_device_id() in kernel
 	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	std::ofstream kernelFile {dir + "/" + ResultName + "/" + kernelName + "_gpu.cl"};
 	kernelFile << kernelSource;
 
 
@@ -1072,7 +1074,7 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}_gpu.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_gpu.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
 				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_gpu.aocx" << '\n';
 				return;
@@ -1177,6 +1179,7 @@ std::string createMapOverlap3DKernelProgram_CL(SkeletonInstance &instance, UserF
 		{"{{MAPOVERLAP_INPUT_TYPE_OPENCL}}", overlapParam.typeNameOpenCL()},
 		{"{{MAPOVERLAP_RESULT_TYPE}}",   mapOverlapFunc.resolvedReturnTypeName},
 		{"{{KERNEL_NAME}}",              kernelName},
+		{"{{KERNEL_DIR}}",               ResultName},
 		{"{{INPUT_PARAM_NAME}}",         overlapParam.name},
 		{"{{FUNCTION_NAME_MAPOVERLAP}}", mapOverlapFunc.uniqueName},
 		{"{{KERNEL_PARAMS}}",            SSKernelParamList.str()},
@@ -1231,7 +1234,7 @@ std::string createMapOverlap3DKernelProgram_CL(SkeletonInstance &instance, UserF
 		
 	// TEMP fix for get_device_id() in kernel
 	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	std::ofstream kernelFile {dir + "/" + ResultName + "/" + kernelName + "_gpu.cl"};
 	kernelFile << kernelSource;
 
 
@@ -1411,7 +1414,7 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}_gpu.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_gpu.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
 				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_gpu.aocx" << '\n';
 				return;
@@ -1514,6 +1517,7 @@ std::string createMapOverlap4DKernelProgram_CL(SkeletonInstance &instance, UserF
 		{"{{MAPOVERLAP_INPUT_TYPE_OPENCL}}", overlapParam.typeNameOpenCL()},
 		{"{{MAPOVERLAP_RESULT_TYPE}}",   mapOverlapFunc.resolvedReturnTypeName},
 		{"{{KERNEL_NAME}}",              kernelName},
+		{"{{KERNEL_DIR}}",               ResultName},
 		{"{{INPUT_PARAM_NAME}}",         overlapParam.name},
 		{"{{FUNCTION_NAME_MAPOVERLAP}}", mapOverlapFunc.uniqueName},
 		{"{{KERNEL_PARAMS}}",            SSKernelParamList.str()},
@@ -1568,7 +1572,7 @@ std::string createMapOverlap4DKernelProgram_CL(SkeletonInstance &instance, UserF
 		
 	// TEMP fix for get_device_id() in kernel
 	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream kernelFile {dir + "/" + kernelName + ".cl"};
+	std::ofstream kernelFile {dir + "/" + ResultName + "/" + kernelName + "_gpu.cl"};
 	kernelFile << kernelSource;
 
 

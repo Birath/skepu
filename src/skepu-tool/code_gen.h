@@ -48,3 +48,4 @@ std::string createMapKernelProgram_FPGA(SkeletonInstance&, UserFunction &mapFunc
 std::string createMapReduceKernelProgram_FPGA(SkeletonInstance&, UserFunction &mapFunc, UserFunction &reduceFunc, std::string dir);
 std::string createScanKernelProgram_FPGA(SkeletonInstance&, UserFunction &scanFunc, std::string dir);
 std::string createMapOverlap1DKernelProgram_FPGA(SkeletonInstance&, UserFunction &scanFunc, std::string dir);
+std::string createMapOverlap2DKernelProgram_FPGA(SkeletonInstance&, UserFunction &scanFunc, std::string dir);

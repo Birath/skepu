@@ -153,7 +153,9 @@ install(
 	DESTINATION lib/cmake/SkePU
 	RENAME SkePUConfig.cmake)
 install(
-	FILES ${CMAKE_CURRENT_LIST_DIR}/CMake/SkePUHelpers.cmake
+	FILES 
+		${CMAKE_CURRENT_LIST_DIR}/CMake/SkePUHelpers.cmake
+		${CMAKE_CURRENT_LIST_DIR}/CMake/BuildFPGAKernelHelper.cmake
 	DESTINATION lib/cmake/SkePU)
 
 skepu_print_config()

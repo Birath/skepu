@@ -28,28 +28,28 @@ __attribute__((reqd_work_group_size(1, 1, 1)))
 __attribute__((uses_global_work_offset(0)))
 __kernel void {{KERNEL_NAME}}_Scan(__global {{SCAN_TYPE}} const* restrict skepu_input, __global {{SCAN_TYPE}}* restrict skepu_output, size_t const skepu_n, int const isInclusive)
 {
-	{{SCAN_TYPE}} shift_reg[SHIFT_REG_SIZE + SCAN_READ_OFFSET - 1] = {0};
-	int exit = skepu_n + SHIFT_REG_SIZE - (SCAN_READ_OFFSET - 1) + isInclusive;
+	{{SCAN_TYPE}} shift_reg[SHIFT_REG_SIZE + 1] = {0};
+	int write_delay = SHIFT_REG_SIZE - SCAN_READ_OFFSET + isInclusive;
 	#pragma unroll SCAN_UNROLL
-	for (int skepu_i = 0; skepu_i < exit; skepu_i++) {
+	for (int skepu_i = 0; skepu_i < skepu_n + write_delay; skepu_i++) {
         #pragma unroll
-		for (int i = 0; i < SHIFT_REG_SIZE + 1; i++) {
+		for (int i = 0; i < SHIFT_REG_SIZE; i++) {
             shift_reg[i] = shift_reg[i + 1];
         }
 
         if (skepu_i < skepu_n) {
-			shift_reg[SHIFT_REG_SIZE + 1] = {{FUNCTION_NAME_SCAN}}(shift_reg[SHIFT_REG_SIZE - SCAN_READ_OFFSET + 1], skepu_input[skepu_i]);
+			shift_reg[SHIFT_REG_SIZE] = {{FUNCTION_NAME_SCAN}}(shift_reg[SHIFT_REG_SIZE - SCAN_READ_OFFSET], skepu_input[skepu_i]);
 		} else { 
-			shift_reg[SHIFT_REG_SIZE + 1] = 0;
+			shift_reg[SHIFT_REG_SIZE] = 0;
 		}
 
-        if (skepu_i >= SHIFT_REG_SIZE - (SCAN_READ_OFFSET - 1) + isInclusive) {
+        if (skepu_i >= write_delay) {
 			{{SCAN_TYPE}} sum = 0;
 			#pragma unroll
 			for (int i = 0; i < SCAN_READ_OFFSET; i++) {
 				sum = {{FUNCTION_NAME_SCAN}}(shift_reg[i], sum);
 			}
-			skepu_output[skepu_i - SHIFT_REG_SIZE + (SCAN_READ_OFFSET - 1) - isInclusive] = sum;
+			skepu_output[skepu_i - write_delay] = sum;
 		}
 	}
 }
@@ -90,7 +90,7 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
 				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_fpga.aocx" << '\n';
 				return;
@@ -151,6 +151,7 @@ std::string createScanKernelProgram_FPGA(SkeletonInstance &instance, UserFunctio
 		{"{{KERNEL_CLASS}}",  "FPGAWrapperClass_" + kernelName},
 		{"{{SCAN_TYPE}}",           scanFunc.resolvedReturnTypeName},
 		{"{{KERNEL_NAME}}",         kernelName},
+		{"{{KERNEL_DIR}}",          ResultName},
 		{"{{FUNCTION_NAME_SCAN}}",  scanFunc.uniqueName}
 	});
 
@@ -174,7 +175,7 @@ std::string createScanKernelProgram_FPGA(SkeletonInstance &instance, UserFunctio
 		
 	// TEMP fix for get_device_id() in kernel
 	replaceTextInString(kernelSource, "SKEPU_INTERNAL_DEVICE_ID", "0");
-	std::ofstream kernelFile {dir + "/" + kernelName + "_fpga.cl"};
+	std::ofstream kernelFile {dir + "/" + ResultName + "/" + kernelName + "_fpga.cl"};
 	kernelFile << kernelSource;
 
 	return kernelName;

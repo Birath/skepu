@@ -624,15 +624,17 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 
 	if (GenCL && GenFPGA) {
 		std::string KernelName_FPGA{};
+		std::string KernelName_CL{};
 		switch (skeleton.type)
 		{
 		case Skeleton::Type::MapReduce:
+			KernelName_CL = createMapReduceKernelProgram_CL(skeletonID, *FuncArgs[0], *FuncArgs[1], ResultDir);
 			KernelName_FPGA = createMapReduceKernelProgram_FPGA(skeletonID, *FuncArgs[0], *FuncArgs[1], ResultDir);
 			break;
 
 		case Skeleton::Type::Map:
+			KernelName_CL = createMapKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
 			KernelName_FPGA = createMapKernelProgram_FPGA(skeletonID, *FuncArgs[0], ResultDir);
-			createMapKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
 			break;
 
 		case Skeleton::Type::MapPairs:
@@ -644,26 +646,28 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 			break;
 
 		case Skeleton::Type::Reduce1D:
-			createReduce1DKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			KernelName_CL =createReduce1DKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
 			KernelName_FPGA = createReduce1DKernelProgram_FPGA(skeletonID, *FuncArgs[0], ResultDir);
 			break;
 
 		case Skeleton::Type::Reduce2D:
+			KernelName_CL = createReduce2DKernelProgram_CL(skeletonID, *FuncArgs[0], *FuncArgs[1], ResultDir);
 			KernelName_FPGA = createReduce2DKernelProgram_FPGA(skeletonID, *FuncArgs[0], *FuncArgs[1], ResultDir);
 			break;
 
 		case Skeleton::Type::Scan:
-			createScanKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			KernelName_CL = createScanKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
 			KernelName_FPGA = createScanKernelProgram_FPGA(skeletonID, *FuncArgs[0], ResultDir);
 			break;
 
 		case Skeleton::Type::MapOverlap1D:
-			createMapOverlap1DKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			KernelName_CL =createMapOverlap1DKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
 			KernelName_FPGA = createMapOverlap1DKernelProgram_FPGA(skeletonID, *FuncArgs[0], ResultDir);
 			break;
 
 		case Skeleton::Type::MapOverlap2D:
-			KernelName_FPGA = createMapOverlap2DKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			KernelName_CL = createMapOverlap2DKernelProgram_CL(skeletonID, *FuncArgs[0], ResultDir);
+			KernelName_FPGA = createMapOverlap2DKernelProgram_FPGA(skeletonID, *FuncArgs[0], ResultDir);
 			break;
 
 		case Skeleton::Type::MapOverlap3D:
@@ -680,17 +684,18 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 		}
 		if (GlobalRewriter.InsertText(loc, "#include \"" + KernelName_FPGA + "_fpga_source.inl\"\n" + lineDirectiveForSourceLoc(loc)))
 			SkePUAbort("Code gen target source loc not rewritable: instance" + InstanceName);
-		if (GlobalRewriter.InsertText(loc, "#include \"" + KernelName_FPGA + "_cl_source.inl\"\n" + lineDirectiveForSourceLoc(loc)))
-			SkePUAbort("Code gen target source loc not rewritable: instance" + InstanceName);
 		switch (skeleton.type)
 		{
+		case Skeleton::Type::MapOverlap2D:
 		case Skeleton::Type::MapOverlap1D:
 		case Skeleton::Type::MapReduce:
 		case Skeleton::Type::Map:
 		case Skeleton::Type::Reduce1D:
 		case Skeleton::Type::Reduce2D:
 		case Skeleton::Type::Scan:
-			SSTemplateArgs << ", CLWrapperClass_" << KernelName_FPGA << ", FPGAWrapperClass_" << KernelName_FPGA;
+			if (GlobalRewriter.InsertText(loc, "#include \"" + KernelName_CL + "_cl_source.inl\"\n" + lineDirectiveForSourceLoc(loc)))
+				SkePUAbort("Code gen target source loc not rewritable: instance" + InstanceName);
+			SSTemplateArgs << ", CLWrapperClass_" << KernelName_CL << ", FPGAWrapperClass_" << KernelName_FPGA;
 			break;
 		default:
 			SSTemplateArgs << ", CLWrapperClass_" << KernelName_FPGA << ", bool";
