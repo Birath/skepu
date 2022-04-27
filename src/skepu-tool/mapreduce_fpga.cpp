@@ -8,45 +8,53 @@ using namespace clang;
 // ------------------------------
 
 const char *MapReduceKernelTemplate_FPGA = R"~~~(
-#ifndef UNROLL
+#ifndef MAPREDUCE_UNROLL
 #define UNROLL 16
+#else 
+#define UNROLL MAPREDUCE_UNROLL
 #endif
-#ifndef USER_FUNC_LATENCY
+
+#ifndef MAPREDUCE_USER_FUNC_LATENCY
 #define USER_FUNC_LATENCY 8
+#else 
+#define USER_FUNC_LATENCY MAPREDUCE_USER_FUNC_LATENCY 
 #endif
 __attribute__((reqd_work_group_size(1, 1, 1)))
 __attribute__((uses_global_work_offset(0)))
 __kernel void {{KERNEL_NAME}}({{KERNEL_PARAMS}} __global {{REDUCE_RESULT_TYPE}}* restrict skepu_output, {{SIZE_PARAMS}} {{STRIDE_PARAMS}} size_t skepu_n, size_t skepu_base)
 {
 	{{CONTAINER_PROXIES}}
-	{{REDUCE_RESULT_TYPE}} shift_reg[USER_FUNC_LATENCY] = {0};
+	{{REDUCE_RESULT_TYPE}} shift_reg[USER_FUNC_LATENCY + 1];
+	#pragma unroll
+	for (int skepu_i = 0; skepu_i < USER_FUNC_LATENCY; skepu_i++) {
+		shift_reg[skepu_i] = {{FUNCTION_NAME_MAP}}({{MAP_PARAMS}});
+	}
 
 	int exit = (skepu_n % UNROLL == 0) ? (skepu_n / UNROLL) : (skepu_n / UNROLL) + 1;
 	for (int i = 0; i < exit; i++) {
-		{{REDUCE_RESULT_TYPE}} partial_result = 0;
+		int skepu_i = i * UNROLL;
+		{{REDUCE_RESULT_TYPE}} partial_result = (USER_FUNC_LATENCY <= skepu_i && skepu_i < skepu_n) ? {{FUNCTION_NAME_MAP}}({{MAP_PARAMS}}) : ({{REDUCE_RESULT_TYPE}}) {{REDUCE_RESULT_TYPE_DEFUALT}};
 		#pragma unroll 
-		for (int j = 0; j < UNROLL; j++) {
-			int skepu_i = i * UNROLL + j;
+		for (int j = 1; j < UNROLL; j++) {
+			skepu_i = i * UNROLL + j;
 			{{INDEX_INITIALIZER}}
 			{{CONTAINER_PROXIE_INNER}}
-			if (skepu_i < skepu_n) {
+			if (USER_FUNC_LATENCY <= skepu_i && skepu_i < skepu_n) {
 				{{MAP_RESULT_TYPE}} tmpMap = {{FUNCTION_NAME_MAP}}({{MAP_PARAMS}});
 				partial_result = {{FUNCTION_NAME_REDUCE}}(partial_result, tmpMap);
 			}
-
-			// partial_result = (index < skepu_n) ? {{FUNCTION_NAME_REDUCE}}(partial_result, input[index]) : partial_result;
 		}
 
-		{{REDUCE_RESULT_TYPE}} cur = {{FUNCTION_NAME_REDUCE}}(shift_reg[USER_FUNC_LATENCY-1], partial_result); 
+		shift_reg[USER_FUNC_LATENCY] = {{FUNCTION_NAME_REDUCE}}(shift_reg[0], partial_result); 
 		#pragma unroll
-		for (int j = USER_FUNC_LATENCY - 1; j > 0; j--) { 
-			shift_reg[j] = shift_reg[j-1]; 
+		for (int j = 0 ; j < USER_FUNC_LATENCY; j++) { 
+			shift_reg[j] = shift_reg[j + 1]; 
 		}
-		shift_reg[0] = cur;
 	}
-	{{REDUCE_RESULT_TYPE}} result = 0;
+	{{REDUCE_RESULT_TYPE}} result = shift_reg[0];
 	#pragma unroll 
-	for (int i = 0; i < USER_FUNC_LATENCY; i++) {
+	// Ignore the last value since it is shifted to the second last value in the last iteration
+	for (int i = 1; i < USER_FUNC_LATENCY; i++) {
 		result = {{FUNCTION_NAME_REDUCE}}(shift_reg[i], result); 
 	}   
 	skepu_output[0] = result;
@@ -175,8 +183,10 @@ std::string createMapReduceKernelProgram_FPGA(SkeletonInstance &instance, UserFu
 	std::stringstream SSKernelName;
 	SSKernelName << instance << "_" << transformToCXXIdentifier(ResultName) << "_MapReduceKernel_" << mapFunc.uniqueName << "_" << reduceFunc.uniqueName << "_arity_" << mapFunc.Varity << "uid_" << GlobalSkeletonIndex++;
 	const std::string kernelName = SSKernelName.str();
+	const std::string defaultInitialization = reduceFunc.astDeclNode->getReturnType().getTypePtr()->isScalarType() ? "{0}" : "{}";
 	std::stringstream SSKernelArgCount;
 	SSKernelArgCount << mapFunc.numKernelArgsCL() + 2 + std::max<int>(0, indexInfo.dim - 1) + stride_counter;
+	
 	
 	std::stringstream SSStrideCount;
 	SSStrideCount << mapFunc.elwiseParams.size();
@@ -184,48 +194,50 @@ std::string createMapReduceKernelProgram_FPGA(SkeletonInstance &instance, UserFu
 	std::ofstream FSOutFile {dir + "/" + kernelName + "_fpga_source.inl"};
 	FSOutFile << templateString(Constructor,
 	{
-		{"{{OPENCL_KERNEL}}",          sourceStream.str()},
-		{"{{KERNEL_CLASS}}",           "FPGAWrapperClass_" + kernelName},
-		{"{{KERNEL_ARGS}}",            SSKernelArgs.str()},
-		{"{{KERNEL_ARG_COUNT}}",       SSKernelArgCount.str()},
-		{"{{HOST_KERNEL_PARAMS}}",     SSHostKernelParamList.str()},
-		{"{{CONTAINER_PROXIES}}",      argsInfo.proxyInitializer},
-		{"{{CONTAINER_PROXIE_INNER}}", argsInfo.proxyInitializerInner},
-		{"{{KERNEL_PARAMS}}",          SSKernelParamList.str()},
-		{"{{MAP_PARAMS}}",             SSMapFuncArgs.str()},
-		{"{{REDUCE_RESULT_TYPE}}",     reduceFunc.rawReturnTypeName},
-		{"{{REDUCE_RESULT_CPU}}",      reduceFunc.resolvedReturnTypeName},
-		{"{{MAP_RESULT_TYPE}}",        mapFunc.rawReturnTypeName},
-		{"{{FUNCTION_NAME_MAP}}",      mapFunc.uniqueName},
-		{"{{FUNCTION_NAME_REDUCE}}",   reduceFunc.uniqueName},
-		{"{{KERNEL_NAME}}",            kernelName},
-		{"{{KERNEL_DIR}}",             ResultName},
-		{"{{INDEX_INITIALIZER}}",      indexInfo.indexInit},
-		{"{{SIZE_PARAMS}}",            indexInfo.sizeParams},
-		{"{{SIZE_ARGS}}",              indexInfo.sizeArgs},
-		{"{{SIZES_TUPLE_PARAM}}",      indexInfo.sizesTupleParam},
-		{"{{STRIDE_PARAMS}}",          SSStrideParams.str()},
-		{"{{STRIDE_ARGS}}",            SSStrideArgs.str()},
-		{"{{STRIDE_COUNT}}",           SSStrideCount.str()},
-		{"{{STRIDE_INIT}}",            SSStrideInit.str()},
-		{"{{TEMPLATE_HEADER}}",        indexInfo.templateHeader}
+		{"{{OPENCL_KERNEL}}",          	   sourceStream.str()},
+		{"{{KERNEL_CLASS}}",           	   "FPGAWrapperClass_" + kernelName},
+		{"{{KERNEL_ARGS}}",            	   SSKernelArgs.str()},
+		{"{{KERNEL_ARG_COUNT}}",       	   SSKernelArgCount.str()},
+		{"{{HOST_KERNEL_PARAMS}}",     	   SSHostKernelParamList.str()},
+		{"{{CONTAINER_PROXIES}}",      	   argsInfo.proxyInitializer},
+		{"{{CONTAINER_PROXIE_INNER}}", 	   argsInfo.proxyInitializerInner},
+		{"{{KERNEL_PARAMS}}",          	   SSKernelParamList.str()},
+		{"{{MAP_PARAMS}}",             	   SSMapFuncArgs.str()},
+		{"{{REDUCE_RESULT_TYPE}}",     	   reduceFunc.rawReturnTypeName},
+		{"{{REDUCE_RESULT_TYPE_DEFUALT}}", defaultInitialization},
+		{"{{REDUCE_RESULT_CPU}}",      	   reduceFunc.resolvedReturnTypeName},
+		{"{{MAP_RESULT_TYPE}}",        	   mapFunc.rawReturnTypeName},
+		{"{{FUNCTION_NAME_MAP}}",      	   mapFunc.uniqueName},
+		{"{{FUNCTION_NAME_REDUCE}}",   	   reduceFunc.uniqueName},
+		{"{{KERNEL_NAME}}",            	   kernelName},
+		{"{{KERNEL_DIR}}",             	   ResultName},
+		{"{{INDEX_INITIALIZER}}",      	   indexInfo.indexInit},
+		{"{{SIZE_PARAMS}}",            	   indexInfo.sizeParams},
+		{"{{SIZE_ARGS}}",              	   indexInfo.sizeArgs},
+		{"{{SIZES_TUPLE_PARAM}}",      	   indexInfo.sizesTupleParam},
+		{"{{STRIDE_PARAMS}}",          	   SSStrideParams.str()},
+		{"{{STRIDE_ARGS}}",            	   SSStrideArgs.str()},
+		{"{{STRIDE_COUNT}}",           	   SSStrideCount.str()},
+		{"{{STRIDE_INIT}}",            	   SSStrideInit.str()},
+		{"{{TEMPLATE_HEADER}}",        	   indexInfo.templateHeader}
 	});
 
 	std::stringstream kernelStream{};
 	kernelStream << templateString(sourceStream.str(), {
-		{"{{KERNEL_NAME}}",            kernelName},
-		{"{{CONTAINER_PROXIES}}",      argsInfo.proxyInitializer},
-		{"{{CONTAINER_PROXIE_INNER}}", argsInfo.proxyInitializerInner},
-		{"{{KERNEL_PARAMS}}",          SSKernelParamList.str()},
-		{"{{MAP_PARAMS}}",             SSMapFuncArgs.str()},
-		{"{{REDUCE_RESULT_TYPE}}",     reduceFunc.rawReturnTypeName},
-		{"{{MAP_RESULT_TYPE}}",        mapFunc.rawReturnTypeName},
-		{"{{FUNCTION_NAME_MAP}}",      mapFunc.uniqueName},
-		{"{{FUNCTION_NAME_REDUCE}}",   reduceFunc.uniqueName},
-		{"{{INDEX_INITIALIZER}}",      indexInfo.indexInit},
-		{"{{SIZE_PARAMS}}",            indexInfo.sizeParams},
-		{"{{STRIDE_PARAMS}}",          SSStrideParams.str()},
-		{"{{STRIDE_INIT}}",            SSStrideInit.str()}
+		{"{{KERNEL_NAME}}",            		kernelName},
+		{"{{CONTAINER_PROXIES}}",           argsInfo.proxyInitializer},
+		{"{{CONTAINER_PROXIE_INNER}}",      argsInfo.proxyInitializerInner},
+		{"{{KERNEL_PARAMS}}",               SSKernelParamList.str()},
+		{"{{MAP_PARAMS}}",                  SSMapFuncArgs.str()},
+		{"{{REDUCE_RESULT_TYPE}}",     	    reduceFunc.rawReturnTypeName},
+		{"{{REDUCE_RESULT_TYPE_DEFUALT}}",  defaultInitialization},
+		{"{{MAP_RESULT_TYPE}}",             mapFunc.rawReturnTypeName},
+		{"{{FUNCTION_NAME_MAP}}",           mapFunc.uniqueName},
+		{"{{FUNCTION_NAME_REDUCE}}",        reduceFunc.uniqueName},
+		{"{{INDEX_INITIALIZER}}",           indexInfo.indexInit},
+		{"{{SIZE_PARAMS}}",                 indexInfo.sizeParams},
+		{"{{STRIDE_PARAMS}}",               SSStrideParams.str()},
+		{"{{STRIDE_INIT}}",                 SSStrideInit.str()}
 	});
 
 	// Replace usage of size_t to match host platform size

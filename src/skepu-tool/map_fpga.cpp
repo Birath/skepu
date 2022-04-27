@@ -25,7 +25,7 @@ __kernel void {{KERNEL_NAME}}({{KERNEL_PARAMS}} {{SIZE_PARAMS}} {{STRIDE_PARAMS}
 
     #pragma ivdep
 	#pragma loop_coalesce
-	for (int skepu_i = 0; skepu_i < skepu_n + SHIFT_REG_SIZE + 1; skepu_i++) {
+	for (int skepu_i = 0; skepu_i < skepu_n + SHIFT_REG_SIZE - 1; skepu_i++) {
 		{{INDEX_INITIALIZER}}
 		{{CONTAINER_PROXIE_INNER}}
 		#pragma unroll

@@ -79,7 +79,7 @@ public:
 		for (skepu::backend::Device_CL *device : skepu::backend::Environment<int>::getInstance()->m_devices_CL)
 		{
 			std::ifstream binary_source_file
-			("skepu_precompiled/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
+			("skepu_precompiled/{{KERNEL_DIR}}/{{KERNEL_NAME}}_fpga.aocx", std::ios::binary);
 			if (!binary_source_file.is_open()) {
 				std::cerr << "Failed to open binary kernel file " << "{{KERNEL_NAME}}_fpga.aocx" << '\n';
 				return;
@@ -128,6 +128,7 @@ std::string createReduce1DKernelProgram_FPGA(SkeletonInstance &instance, UserFun
 	FSOutFile << templateString(Constructor1D,
 	{
 		{"{{OPENCL_KERNEL}}",        sourceStream.str()},
+		{"{{KERNEL_DIR}}",           ResultName},
 		{"{{KERNEL_CLASS}}",         "FPGAWrapperClass_" + kernelName},
 		{"{{REDUCE_RESULT_TYPE}}",   reduceFunc.resolvedReturnTypeName},
 		{"{{REDUCE_RESULT_TYPE_DEFUALT}}", defaultInitialization},

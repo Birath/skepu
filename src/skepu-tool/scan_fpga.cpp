@@ -28,10 +28,16 @@ __attribute__((reqd_work_group_size(1, 1, 1)))
 __attribute__((uses_global_work_offset(0)))
 __kernel void {{KERNEL_NAME}}_Scan(__global {{SCAN_TYPE}} const* restrict skepu_input, __global {{SCAN_TYPE}}* restrict skepu_output, size_t const skepu_n, int const isInclusive)
 {
-	{{SCAN_TYPE}} shift_reg[SHIFT_REG_SIZE + 1] = {0};
+	{{SCAN_TYPE}} shift_reg[SHIFT_REG_SIZE + 1] = {({{SCAN_TYPE}}) {{SCAN_TYPE_DEFAULT}}};
+
+	#pragma unroll
+	for (int i = SHIFT_REG_SIZE + 1 - SCAN_READ_OFFSET; i < SHIFT_REG_SIZE + 1; i++) {
+		shift_reg[i] = skepu_input[i - (SHIFT_REG_SIZE + 1 - SCAN_READ_OFFSET)];
+	}
+
 	int write_delay = SHIFT_REG_SIZE - SCAN_READ_OFFSET + isInclusive;
 	#pragma unroll SCAN_UNROLL
-	for (int skepu_i = 0; skepu_i < skepu_n + write_delay; skepu_i++) {
+	for (int skepu_i = SCAN_READ_OFFSET; skepu_i < skepu_n + write_delay; skepu_i++) {
         #pragma unroll
 		for (int i = 0; i < SHIFT_REG_SIZE; i++) {
             shift_reg[i] = shift_reg[i + 1];
@@ -40,13 +46,13 @@ __kernel void {{KERNEL_NAME}}_Scan(__global {{SCAN_TYPE}} const* restrict skepu_
         if (skepu_i < skepu_n) {
 			shift_reg[SHIFT_REG_SIZE] = {{FUNCTION_NAME_SCAN}}(shift_reg[SHIFT_REG_SIZE - SCAN_READ_OFFSET], skepu_input[skepu_i]);
 		} else { 
-			shift_reg[SHIFT_REG_SIZE] = 0;
+			shift_reg[SHIFT_REG_SIZE] = ({{SCAN_TYPE}}) {{SCAN_TYPE_DEFAULT}};
 		}
 
         if (skepu_i >= write_delay) {
-			{{SCAN_TYPE}} sum = 0;
+			{{SCAN_TYPE}} sum = shift_reg[0];
 			#pragma unroll
-			for (int i = 0; i < SCAN_READ_OFFSET; i++) {
+			for (int i = 1; i < SCAN_READ_OFFSET; i++) {
 				sum = {{FUNCTION_NAME_SCAN}}(shift_reg[i], sum);
 			}
 			skepu_output[skepu_i - write_delay] = sum;
@@ -142,7 +148,7 @@ std::string createScanKernelProgram_FPGA(SkeletonInstance &instance, UserFunctio
 		sourceStream << generateUserTypeCode_CL(*RefType);
 
 	sourceStream << KernelPredefinedTypes_CL << generateUserFunctionCode_CL(scanFunc) << ScanKernel_FPGA;
-
+	const std::string defaultInitialization = scanFunc.astDeclNode->getReturnType().getTypePtr()->isScalarType() ? "{0}" : "{}";
 	const std::string kernelName = instance + "_" + transformToCXXIdentifier(ResultName) + "_ScanKernel_" + scanFunc.uniqueName;
 	std::ofstream FSOutFile {dir + "/" + kernelName + "_fpga_source.inl"};
 	FSOutFile << templateString(Constructor,
@@ -150,6 +156,7 @@ std::string createScanKernelProgram_FPGA(SkeletonInstance &instance, UserFunctio
 		{"{{OPENCL_KERNEL}}", sourceStream.str()},
 		{"{{KERNEL_CLASS}}",  "FPGAWrapperClass_" + kernelName},
 		{"{{SCAN_TYPE}}",           scanFunc.resolvedReturnTypeName},
+		{"{{SCAN_TYPE_DEFAULT}}",   defaultInitialization},
 		{"{{KERNEL_NAME}}",         kernelName},
 		{"{{KERNEL_DIR}}",          ResultName},
 		{"{{FUNCTION_NAME_SCAN}}",  scanFunc.uniqueName}
@@ -159,6 +166,7 @@ std::string createScanKernelProgram_FPGA(SkeletonInstance &instance, UserFunctio
 	kernelStream << templateString(sourceStream.str(), {
 		{"{{KERNEL_NAME}}",         kernelName},
 		{"{{SCAN_TYPE}}",           scanFunc.resolvedReturnTypeName},
+		{"{{SCAN_TYPE_DEFAULT}}",   defaultInitialization},
 		{"{{KERNEL_NAME}}",         kernelName},
 		{"{{FUNCTION_NAME_SCAN}}",  scanFunc.uniqueName}
 	});
