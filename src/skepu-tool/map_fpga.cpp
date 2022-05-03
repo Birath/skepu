@@ -1,5 +1,6 @@
 #include "code_gen.h"
 #include "code_gen_cl.h"
+#include "code_gen_fpga.h"
 
 using namespace clang;
 
@@ -21,26 +22,14 @@ __kernel void {{KERNEL_NAME}}({{KERNEL_PARAMS}} {{SIZE_PARAMS}} {{STRIDE_PARAMS}
 {
 	{{CONTAINER_PROXIES}}
 
-	{{MAP_RESULT_TYPE}} shift_reg[SHIFT_REG_SIZE] = {0};
-
     #pragma ivdep
 	#pragma loop_coalesce
-	for (int skepu_i = 0; skepu_i < skepu_n + SHIFT_REG_SIZE - 1; skepu_i++) {
+	#pragma unroll UNROLL
+	for (int skepu_i = 0; skepu_i < skepu_n; skepu_i++) {
 		{{INDEX_INITIALIZER}}
 		{{CONTAINER_PROXIE_INNER}}
-		#pragma unroll
-		for (int i = 0; i < SHIFT_REG_SIZE - 1; i++) {
-            shift_reg[i] = shift_reg[i + 1];
-        }
-		if (skepu_i < skepu_n) {
-			shift_reg[SHIFT_REG_SIZE - 1] = {{FUNCTION_NAME_MAP}}({{MAP_ARGS}});
-		} else {
-			shift_reg[SHIFT_REG_SIZE - 1] = 0;
-		}
-
-		if (skepu_i >= SHIFT_REG_SIZE - 1) {
-			skepu_output[skepu_i - SHIFT_REG_SIZE + 1] = shift_reg[0];
-		}
+		skepu_output[skepu_i] = {{FUNCTION_NAME_MAP}}({{MAP_ARGS}});
+		
 	}
 }
 )~~~";
@@ -139,7 +128,7 @@ std::string createMapKernelProgram_FPGA(SkeletonInstance &instance, UserFunction
 	IndexCodeGen indexInfo = indexInitHelper_CL(mapFunc);
 	bool first = !indexInfo.hasIndex;
 	SSMapFuncArgs << indexInfo.mapFuncParam;
-	std::string multiOutputAssign = handleOutputs_CL(mapFunc, SSHostKernelParamList, SSKernelParamList, SSKernelArgs, true);
+	std::string multiOutputAssign = handleOutputs_FPGA(mapFunc, SSHostKernelParamList, SSKernelParamList, SSKernelArgs, true);
 	handleRandomParam_CL(mapFunc, sourceStream, SSMapFuncArgs, SSHostKernelParamList, SSKernelParamList, SSKernelArgs, first);
 	
 	size_t stride_counter = 0;
