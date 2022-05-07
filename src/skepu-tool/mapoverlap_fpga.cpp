@@ -18,19 +18,25 @@ using namespace clang;
  *  overlap to < 256.
  */
 static const std::string MapOverlapKernel_FPGA = R"~~~(
+#ifndef MAPOVERLAP_UNROLL
+#define UNROLL 8
+#else
+#define UNROLL MAPOVERLAP_UNROLL
+#endif
+
 #define OVERLAP_SHIFT_REG_SIZE 16
 #define MAX_OVERLAP_SIZE 256
 
 __attribute__((reqd_work_group_size(1, 1, 1)))
 __attribute__((uses_global_work_offset(0)))
 __kernel void {{KERNEL_NAME}}_Vector({{KERNEL_PARAMS}}
-	__global {{MAPOVERLAP_INPUT_TYPE_OPENCL}} const* restrict skepu_wrap, size_t skepu_n, size_t skepu_overlap, size_t overlap_padding, size_t out_offset,
-	size_t out_numelements, int skepu_poly, {{MAPOVERLAP_INPUT_TYPE_OPENCL}} skepu_pad, __local {{MAPOVERLAP_INPUT_TYPE_OPENCL}}* sdata
+	__global {{MAPOVERLAP_INPUT_TYPE_OPENCL}} const* restrict skepu_wrap, size_t skepu_n, size_t skepu_overlap, size_t out_offset,
+	size_t out_numelements, int skepu_poly, {{MAPOVERLAP_INPUT_TYPE_OPENCL}} skepu_pad
 )
 {
 	{{MAPOVERLAP_INPUT_TYPE_OPENCL}} overlap_shift_reg[OVERLAP_SHIFT_REG_SIZE];
 	
-	// unsigned long overlap_padding = skepu_overlap * 2 + (skepu_overlap % 2 == 0 ? 1 : 0);
+	unsigned long overlap_padding = skepu_overlap * 2 + (skepu_overlap % 2 == 0 ? 1 : 0);
 	if (skepu_poly == SKEPU_EDGE_CYCLIC) {
 		#pragma unroll
 		for (int i = 0; i < OVERLAP_SHIFT_REG_SIZE; i++) {
@@ -42,7 +48,7 @@ __kernel void {{KERNEL_NAME}}_Vector({{KERNEL_PARAMS}}
 			overlap_shift_reg[i] = skepu_poly == SKEPU_EDGE_DUPLICATE ? r[0] : skepu_pad;
 		}
 	}
-
+	#pragma unroll UNROLL
 	for (int i = 0; i < skepu_n + skepu_overlap + 1; i++) {
 		#pragma unroll
 		for (int j = 0; j < OVERLAP_SHIFT_REG_SIZE - 1; j++) {
@@ -212,7 +218,7 @@ __kernel void {{KERNEL_NAME}}_MatColWise({{KERNEL_PARAMS}}
 				}
 			}
 			{{INDEX_INITIALIZER}}
-			int overlapArrayIndex = (overlapIndex % colWidth) * rowWidth + overlappedIndex / colWidth;
+			int overlapArrayIndex = (overlapIndex % colWidth) * rowWidth + overlapIndex / colWidth;
 			skepu_output[overlapArrayIndex] ={{FUNCTION_NAME_MAPOVERLAP}}({{MAPOVERLAP_ARGS}});
 		}
 	}
