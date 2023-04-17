@@ -763,7 +763,7 @@ bool transformSkeletonInvocation(const Skeleton &skeleton, std::string InstanceN
 	}
 	else
 	{
-		SSTemplateArgs << ", void";
+		SSTemplateArgs << ", void, void";
 	}
 
 
